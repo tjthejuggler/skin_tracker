@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
 import com.example.skin_tracker.data.repo.ComparisonRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
-import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.domain.rating.Elo
@@ -24,14 +23,12 @@ data class CompareState(
     val photoB: Photo? = null,
     val comparisonsToday: Int = 0,
     val totalPhotos: Int = 0,
-    val isLoading: Boolean = false,
-    val croppingPhoto: Photo? = null
+    val isLoading: Boolean = false
 )
 
 class CompareViewModel(
     private val photoRepository: PhotoRepository,
-    private val comparisonRepository: ComparisonRepository,
-    private val photoFileStore: PhotoFileStore
+    private val comparisonRepository: ComparisonRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CompareState())
@@ -95,24 +92,6 @@ class CompareViewModel(
         loadPair()
     }
 
-    fun startCropping(photo: Photo) {
-        _state.value = _state.value.copy(croppingPhoto = photo)
-    }
-
-    fun cancelCropping() {
-        _state.value = _state.value.copy(croppingPhoto = null)
-    }
-
-    fun confirmCrop(left: Int, top: Int, right: Int, bottom: Int) {
-        val photo = _state.value.croppingPhoto ?: return
-        viewModelScope.launch {
-            photoFileStore.crop(photo.uri, left, top, right, bottom)
-            _state.value = _state.value.copy(croppingPhoto = null)
-            // Reload pair to refresh the image
-            loadPair()
-        }
-    }
-
     private fun loadComparisonCount() {
         viewModelScope.launch {
             val cal = Calendar.getInstance()
@@ -132,7 +111,7 @@ class CompareViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val container = (application as SkinTrackerApp).container
-            return CompareViewModel(container.photoRepository, container.comparisonRepository, container.photoFileStore) as T
+            return CompareViewModel(container.photoRepository, container.comparisonRepository) as T
         }
     }
 }

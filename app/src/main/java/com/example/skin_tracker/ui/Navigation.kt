@@ -9,4 +9,7 @@ sealed class Screen(val route: String) {
     data object PhotoDetail : Screen("photo/{photoId}") {
         fun createRoute(photoId: Long) = "photo/$photoId"
     }
+    data object EditPhoto : Screen("edit/{photoId}") {
+        fun createRoute(photoId: Long) = "edit/$photoId"
+    }
 }

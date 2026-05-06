@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.FilledTonalButton
@@ -43,18 +42,6 @@ fun CompareScreen(
     viewModel: CompareViewModel = viewModel(factory = CompareViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
-
-    // If cropping, show the crop overlay instead
-    if (state.croppingPhoto != null) {
-        CropOverlay(
-            imagePath = state.croppingPhoto!!.uri,
-            onConfirm = { left, top, right, bottom ->
-                viewModel.confirmCrop(left, top, right, bottom)
-            },
-            onCancel = { viewModel.cancelCropping() }
-        )
-        return
-    }
 
     Column(
         modifier = Modifier
@@ -122,35 +109,30 @@ fun CompareScreen(
                 }
             }
         } else {
-            // Two photos stacked vertically, each showing the full image
+            // Two photos stacked vertically
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Photo A
                 ComparePhotoCard(
                     photo = state.photoA!!,
                     label = "A",
                     onTap = { viewModel.pickWinner(winnerIsA = true) },
-                    onEdit = { viewModel.startCropping(state.photoA!!) },
                     modifier = Modifier.weight(1f)
                 )
 
-                // Photo B
                 ComparePhotoCard(
                     photo = state.photoB!!,
                     label = "B",
                     onTap = { viewModel.pickWinner(winnerIsA = false) },
-                    onEdit = { viewModel.startCropping(state.photoB!!) },
                     modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Instruction
             Text(
                 "Tap the photo where your skin looks better",
                 style = MaterialTheme.typography.bodyMedium,
@@ -158,7 +140,6 @@ fun CompareScreen(
                 modifier = Modifier.padding(bottom = 4.dp)
             )
 
-            // Skip button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -178,7 +159,6 @@ private fun ComparePhotoCard(
     photo: Photo,
     label: String,
     onTap: () -> Unit,
-    onEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
@@ -191,20 +171,6 @@ private fun ComparePhotoCard(
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )
-
-        // Edit/crop button
-        IconButton(
-            onClick = onEdit,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(4.dp)
-        ) {
-            Icon(
-                Icons.Default.Edit,
-                contentDescription = "Crop photo $label",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
         // Label badge
         Box(

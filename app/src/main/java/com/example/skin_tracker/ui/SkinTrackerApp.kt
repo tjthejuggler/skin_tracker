@@ -23,11 +23,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.skin_tracker.ui.capture.CaptureScreen
 import com.example.skin_tracker.ui.chart.ChartScreen
 import com.example.skin_tracker.ui.compare.CompareScreen
-import com.example.skin_tracker.ui.capture.CaptureScreen
-import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.detail.PhotoDetailScreen
+import com.example.skin_tracker.ui.edit.EditPhotoScreen
+import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.history.HistoryScreen
 
 data class BottomNavItem(
@@ -105,6 +106,9 @@ fun SkinTrackerApp() {
                 GalleryScreen(
                     onPhotoClick = { photoId ->
                         navController.navigate(Screen.PhotoDetail.createRoute(photoId))
+                    },
+                    onEditPhoto = { photoId ->
+                        navController.navigate(Screen.EditPhoto.createRoute(photoId))
                     }
                 )
             }
@@ -119,6 +123,16 @@ fun SkinTrackerApp() {
             ) { backStackEntry ->
                 val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
                 PhotoDetailScreen(
+                    photoId = photoId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = Screen.EditPhoto.route,
+                arguments = listOf(navArgument("photoId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
+                EditPhotoScreen(
                     photoId = photoId,
                     onBack = { navController.popBackStack() }
                 )
