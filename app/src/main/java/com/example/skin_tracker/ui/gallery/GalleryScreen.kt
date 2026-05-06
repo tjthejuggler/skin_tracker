@@ -22,15 +22,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,7 +51,6 @@ import java.io.File
 @Composable
 fun GalleryScreen(
     onPhotoClick: (Long) -> Unit,
-    onEditPhoto: (Long) -> Unit,
     viewModel: GalleryViewModel = viewModel(factory = GalleryViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val context = LocalContext.current
@@ -111,8 +107,7 @@ fun GalleryScreen(
                         group.photos.forEach { photo ->
                             PhotoThumbnail(
                                 photo = photo,
-                                onPhotoClick = { onPhotoClick(photo.id) },
-                                onEditClick = { onEditPhoto(photo.id) }
+                                onPhotoClick = { onPhotoClick(photo.id) }
                             )
                         }
                     }
@@ -194,40 +189,15 @@ fun GalleryScreen(
 @Composable
 private fun PhotoThumbnail(
     photo: Photo,
-    onPhotoClick: () -> Unit,
-    onEditClick: () -> Unit
+    onPhotoClick: () -> Unit
 ) {
-    Box(modifier = Modifier.size(100.dp)) {
-        AsyncImage(
-            model = File(photo.uri),
-            contentDescription = "Photo thumbnail",
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onPhotoClick() },
-            contentScale = ContentScale.Crop
-        )
-
-        // Edit button badge in top-right corner
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(2.dp),
-            shape = RoundedCornerShape(6.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-            tonalElevation = 2.dp
-        ) {
-            IconButton(
-                onClick = onEditClick,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit photo",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
+    AsyncImage(
+        model = File(photo.uri),
+        contentDescription = "Photo thumbnail",
+        modifier = Modifier
+            .size(100.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onPhotoClick() },
+        contentScale = ContentScale.Crop
+    )
 }

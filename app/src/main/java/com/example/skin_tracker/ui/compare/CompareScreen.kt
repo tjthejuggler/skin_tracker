@@ -171,20 +171,5 @@ private fun ComparePhotoCard(
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )
-
-        // Label badge
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(4.dp)
-        ) {
-            FilledTonalButton(
-                onClick = {},
-                shape = RoundedCornerShape(16.dp),
-                content = {
-                    Text(label, style = MaterialTheme.typography.labelMedium)
-                }
-            )
-        }
     }
 }

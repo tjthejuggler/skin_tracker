@@ -13,6 +13,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ import java.util.Locale
 fun PhotoDetailScreen(
     photoId: Long,
     onBack: () -> Unit,
+    onEditPhoto: (Long) -> Unit,
     viewModel: PhotoDetailViewModel = viewModel(factory = PhotoDetailViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -70,6 +72,11 @@ fun PhotoDetailScreen(
                 }
             },
             actions = {
+                IconButton(onClick = {
+                    state.sameDayPhotos.getOrNull(state.currentIndex)?.let { onEditPhoto(it.id) }
+                }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit photo")
+                }
                 IconButton(onClick = { showDeleteDialog = true }) {
                     Icon(
                         Icons.Default.Delete,
@@ -85,6 +92,10 @@ fun PhotoDetailScreen(
                 initialPage = state.currentIndex,
                 pageCount = { state.sameDayPhotos.size }
             )
+
+            LaunchedEffect(pagerState.currentPage) {
+                viewModel.setCurrentIndex(pagerState.currentPage)
+            }
 
             HorizontalPager(
                 state = pagerState,

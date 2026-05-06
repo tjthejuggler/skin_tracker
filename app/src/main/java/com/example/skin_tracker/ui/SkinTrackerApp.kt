@@ -106,9 +106,6 @@ fun SkinTrackerApp() {
                 GalleryScreen(
                     onPhotoClick = { photoId ->
                         navController.navigate(Screen.PhotoDetail.createRoute(photoId))
-                    },
-                    onEditPhoto = { photoId ->
-                        navController.navigate(Screen.EditPhoto.createRoute(photoId))
                     }
                 )
             }
@@ -124,7 +121,10 @@ fun SkinTrackerApp() {
                 val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
                 PhotoDetailScreen(
                     photoId = photoId,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onEditPhoto = { editId ->
+                        navController.navigate(Screen.EditPhoto.createRoute(editId))
+                    }
                 )
             }
             composable(

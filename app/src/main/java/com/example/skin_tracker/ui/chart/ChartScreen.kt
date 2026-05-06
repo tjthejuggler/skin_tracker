@@ -145,7 +145,7 @@ fun ChartScreen(
                         xAxis.gridColor = Color.argb(60, 255, 255, 255)
                         xAxis.valueFormatter = object : ValueFormatter() {
                             override fun getFormattedValue(value: Float): String {
-                                val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
+                                val sdf = SimpleDateFormat("MMM yyyy", Locale.getDefault())
                                 return sdf.format(Date(value.toLong()))
                             }
                         }

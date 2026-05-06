@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -39,17 +40,50 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import java.io.File
+import kotlin.math.roundToInt
 
 /**
  * Full-screen crop editor.
- * - The crop rectangle is transparent (see-through) so the user can see the image underneath.
- * - Drag a corner handle to resize (aspect ratio locked to 1:1 square).
- * - Drag anywhere inside the crop rect to move it.
- * - Tap Rotate to spin the image 90° clockwise.
+ *
+ * Coordinate plan
+ * ───────────────
+ * • imgW × imgH    — actual pixel dimensions of the file on disk (no EXIF, downscaled).
+ * • visW × visH    — visual dimensions after rotation: swapped for 90°/270°.
+ * • imageDrawRect  — the on-screen rect where the rotated image is drawn (visual dims fitted
+ *                    into the Box with ContentScale.Fit-like letterboxing).
+ * • cropRect       — normalised (0..1) rectangle relative to imageDrawRect; drawn in screen
+ *                    space (the crop frame stays upright while the image rotates beneath).
+ *
+ * Rendering trick
+ * ───────────────
+ * To make the rotated image fill imageDrawRect exactly:
+ *   1. Layout an AsyncImage container at size (imgW, imgH) aspect, *transposed* for 90°/270°
+ *      so that its size BEFORE rotation is the rect that AFTER rotation becomes imageDrawRect.
+ *      For 0°/180° this is just imageDrawRect.size; for 90°/270° it is (height, width) of
+ *      imageDrawRect.
+ *   2. Position the container so its centre matches imageDrawRect's centre.
+ *   3. Apply graphicsLayer { rotationZ } — rotates around the container's centre, producing
+ *      an image whose visible bounding box is exactly imageDrawRect.
+ *
+ * Apply
+ * ─────
+ * cropRect (normalised against imageDrawRect, which uses visual dims) maps directly to
+ * rotated-image pixel coords by multiplying by (effW, effH) where (effW, effH) are the
+ * rotated-image's pixel dimensions. PhotoFileStore.crop() rotates the bitmap first, then
+ * crops at exactly those pixel coords.
+ *
+ * IMPORTANT
+ * ─────────
+ * PhotoFileStore.crop() uses BitmapFactory.Options(inScaled=false) when decoding so that
+ * bitmap.width × bitmap.height match the file's actual dimensions (which is what
+ * inJustDecodeBounds reports here). Without this, display-density rescaling makes crop
+ * pixel coords land on the wrong region.
  */
 @Composable
 fun CropOverlay(
@@ -57,41 +91,37 @@ fun CropOverlay(
     onConfirm: (cropLeft: Int, cropTop: Int, cropRight: Int, cropBottom: Int, rotationDegrees: Int) -> Unit,
     onCancel: () -> Unit
 ) {
-    // Decode the ACTUAL stored file dimensions (already downscaled by PhotoFileStore)
     val options = remember(imagePath) {
         BitmapFactory.Options().apply {
             inJustDecodeBounds = true
             BitmapFactory.decodeFile(imagePath, this)
         }
     }
-    // These are the real pixel dimensions of the file on disk
     val imgW = options.outWidth.toFloat()
     val imgH = options.outHeight.toFloat()
 
     var rotationDegrees by remember { mutableIntStateOf(0) }
 
-    // Crop rect in normalised coords (0..1) relative to the *drawn image area*
     var cropRect by remember { mutableStateOf(Rect(0.15f, 0.15f, 0.85f, 0.85f)) }
     var dragCorner by remember { mutableStateOf<DragCorner?>(null) }
 
-    // The Box's pixel size (set via onGloballyPositioned)
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // Compute the drawn image area within the Box (accounts for ContentScale.Fit letterboxing).
-    // NOTE: graphicsLayer { rotationZ } is purely visual — it does NOT change layout bounds.
-    // So imageDrawRect always uses the original imgW × imgH regardless of rotationDegrees.
-    val imageDrawRect = remember(boxSize, imgW, imgH) {
+    val imageDrawRect = remember(boxSize, imgW, imgH, rotationDegrees) {
         if (boxSize == IntSize.Zero || imgW <= 0f || imgH <= 0f) {
             Rect(Offset.Zero, Size.Zero)
         } else {
-            val scale = minOf(boxSize.width.toFloat() / imgW, boxSize.height.toFloat() / imgH)
-            val drawW = imgW * scale
-            val drawH = imgH * scale
+            val (visW, visH) = if (rotationDegrees % 180 == 0) imgW to imgH else imgH to imgW
+            val scale = minOf(boxSize.width.toFloat() / visW, boxSize.height.toFloat() / visH)
+            val drawW = visW * scale
+            val drawH = visH * scale
             val ox = (boxSize.width - drawW) / 2f
             val oy = (boxSize.height - drawH) / 2f
             Rect(Offset(ox, oy), Size(drawW, drawH))
         }
     }
+
+    val density = LocalDensity.current
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -101,23 +131,18 @@ fun CropOverlay(
                 .weight(1f)
                 .fillMaxWidth()
                 .onGloballyPositioned { boxSize = it.size }
-                .pointerInput(imageDrawRect, rotationDegrees) {
+                .pointerInput(imageDrawRect) {
                     detectDragGestures(
                         onDragStart = { offset ->
-                            // Touch coords are in unrotated layout space; rotate them to match
-                            // the visual orientation before comparing with crop corners
-                            val rotatedOffset = rotateOffset(offset, -rotationDegrees, imageDrawRect)
-                            dragCorner = nearestCorner(rotatedOffset, cropRect, imageDrawRect)
+                            dragCorner = nearestCorner(offset, cropRect, imageDrawRect)
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             val drawW = imageDrawRect.size.width
                             val drawH = imageDrawRect.size.height
                             if (drawW > 0f && drawH > 0f) {
-                                // Rotate drag delta to match visual orientation
-                                val rotatedDrag = rotateDelta(dragAmount, -rotationDegrees)
-                                val dx = rotatedDrag.x / drawW
-                                val dy = rotatedDrag.y / drawH
+                                val dx = dragAmount.x / drawW
+                                val dy = dragAmount.y / drawH
                                 cropRect = moveCorner(cropRect, dragCorner, dx, dy)
                             }
                         },
@@ -126,24 +151,39 @@ fun CropOverlay(
                     )
                 }
         ) {
-            // The photo, rotated visually
-            AsyncImage(
-                model = File(imagePath),
-                contentDescription = "Crop target",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { rotationZ = rotationDegrees.toFloat() },
-                contentScale = ContentScale.Fit
-            )
+            // ── Image container, sized so rotation bounding box == imageDrawRect ──
+            if (imageDrawRect.size != Size.Zero) {
+                // Container size BEFORE rotation:
+                //   0°/180° → same as imageDrawRect (visW, visH)
+                //   90°/270° → transposed (visH, visW) so that after rotation the bounding box
+                //             equals imageDrawRect.
+                val isQuarter = rotationDegrees % 180 != 0
+                val containerW = if (isQuarter) imageDrawRect.size.height else imageDrawRect.size.width
+                val containerH = if (isQuarter) imageDrawRect.size.width else imageDrawRect.size.height
+                val centerX = imageDrawRect.left + imageDrawRect.size.width / 2f
+                val centerY = imageDrawRect.top + imageDrawRect.size.height / 2f
+                val offsetX = (centerX - containerW / 2f).roundToInt()
+                val offsetY = (centerY - containerH / 2f).roundToInt()
 
-            // Overlay canvas — rotates with the image; Offscreen compositing for BlendMode.Clear
+                AsyncImage(
+                    model = File(imagePath),
+                    contentDescription = "Crop target",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .offset { IntOffset(offsetX, offsetY) }
+                        .size(
+                            width = with(density) { containerW.toDp() },
+                            height = with(density) { containerH.toDp() }
+                        )
+                        .graphicsLayer { rotationZ = rotationDegrees.toFloat() }
+                )
+            }
+
+            // ── Crop overlay — drawn in screen space, no rotation ──
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        rotationZ = rotationDegrees.toFloat()
-                        compositingStrategy = CompositingStrategy.Offscreen
-                    }
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             ) {
                 if (imageDrawRect.size == Size.Zero) return@Canvas
 
@@ -152,17 +192,14 @@ fun CropOverlay(
                 val right  = imageDrawRect.left + cropRect.right  * imageDrawRect.size.width
                 val bottom = imageDrawRect.top  + cropRect.bottom * imageDrawRect.size.height
 
-                // 1. Fill entire canvas with semi-transparent black
                 drawRect(Color.Black.copy(alpha = 0.55f))
 
-                // 2. Punch a transparent hole for the crop area (requires Offscreen layer)
                 drawPath(
                     Path().apply { addRect(Rect(left, top, right, bottom)) },
                     color = Color.Transparent,
                     blendMode = BlendMode.Clear
                 )
 
-                // 3. White border
                 drawRect(
                     Color.White,
                     topLeft = Offset(left, top),
@@ -170,7 +207,6 @@ fun CropOverlay(
                     style = Stroke(width = 3f)
                 )
 
-                // 4. Corner handles
                 val h = 28f
                 listOf(
                     Offset(left, top),
@@ -185,7 +221,6 @@ fun CropOverlay(
                     )
                 }
 
-                // 5. Rule-of-thirds grid
                 val tw = (right - left) / 3f
                 val th = (bottom - top) / 3f
                 val grid = Color.White.copy(alpha = 0.4f)
@@ -204,18 +239,13 @@ fun CropOverlay(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cancel
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                FilledIconButton(
-                    onClick = onCancel,
-                    modifier = Modifier.size(48.dp)
-                ) {
+                FilledIconButton(onClick = onCancel, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Cancel")
                 }
                 Text("Cancel", style = MaterialTheme.typography.labelSmall)
             }
 
-            // Rotate
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 FilledIconButton(
                     onClick = { rotationDegrees = (rotationDegrees + 90) % 360 },
@@ -226,18 +256,21 @@ fun CropOverlay(
                 Text("Rotate", style = MaterialTheme.typography.labelSmall)
             }
 
-            // Apply / confirm
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 FilledIconButton(
                     onClick = {
                         if (imgW > 0f && imgH > 0f) {
-                            // PhotoFileStore.crop() rotates the bitmap first, then crops.
-                            // So pixel coords must be relative to the rotated image dimensions.
-                            val (effW, effH) = if (rotationDegrees % 180 == 0) imgW to imgH else imgH to imgW
-                            val cropLeft   = (cropRect.left   * effW).toInt().coerceAtLeast(0)
-                            val cropTop    = (cropRect.top    * effH).toInt().coerceAtLeast(0)
-                            val cropRight  = (cropRect.right  * effW).toInt().coerceAtMost(effW.toInt())
-                            val cropBottom = (cropRect.bottom * effH).toInt().coerceAtMost(effH.toInt())
+                            // cropRect is in normalised (0..1) coords relative to the visual
+                            // (post-rotation) image. PhotoFileStore.crop() now expects pixel
+                            // coords in the ORIGINAL (un-rotated) bitmap, then it rotates the
+                            // cropped result. So we must transform visual-normalised → original-px.
+                            val (oL, oT, oR, oB) = visualToOriginalCrop(
+                                cropRect, imgW, imgH, rotationDegrees
+                            )
+                            val cropLeft   = oL.toInt().coerceAtLeast(0)
+                            val cropTop    = oT.toInt().coerceAtLeast(0)
+                            val cropRight  = oR.toInt().coerceAtMost(imgW.toInt())
+                            val cropBottom = oB.toInt().coerceAtMost(imgH.toInt())
                             onConfirm(cropLeft, cropTop, cropRight, cropBottom, rotationDegrees)
                         }
                     },
@@ -251,40 +284,71 @@ fun CropOverlay(
     }
 }
 
+// ── Coordinate helpers ───────────────────────────────────────────────────────
+
+/**
+ * Convert a normalised (0..1) crop rect from the VISUAL (post-rotation) image space to
+ * pixel coordinates in the ORIGINAL (un-rotated) bitmap.
+ *
+ * Visual axes after rotation:
+ *   • 0°/180° — visW × visH = imgW × imgH (same orientation, possibly flipped)
+ *   • 90°/270° — visW × visH = imgH × imgW (transposed)
+ *
+ * Mapping derived for clockwise rotation (matches both Compose graphicsLayer { rotationZ }
+ * and Android Matrix.postRotate, which agree on direction in screen coordinates).
+ *
+ * Returns Quadruple-as-FloatArray [left, top, right, bottom] in original-bitmap pixel units.
+ */
+private fun visualToOriginalCrop(
+    crop: Rect,
+    imgW: Float,
+    imgH: Float,
+    rotationDegrees: Int
+): FloatArray {
+    val nL = crop.left
+    val nT = crop.top
+    val nR = crop.right
+    val nB = crop.bottom
+    val rot = ((rotationDegrees % 360) + 360) % 360
+    return when (rot) {
+        0 -> floatArrayOf(nL * imgW, nT * imgH, nR * imgW, nB * imgH)
+        90 -> floatArrayOf(nT * imgW, (1f - nR) * imgH, nB * imgW, (1f - nL) * imgH)
+        180 -> floatArrayOf((1f - nR) * imgW, (1f - nB) * imgH, (1f - nL) * imgW, (1f - nT) * imgH)
+        270 -> floatArrayOf((1f - nB) * imgW, nL * imgH, (1f - nT) * imgW, nR * imgH)
+        else -> floatArrayOf(nL * imgW, nT * imgH, nR * imgW, nB * imgH)
+    }
+}
+
+private operator fun FloatArray.component1(): Float = this[0]
+private operator fun FloatArray.component2(): Float = this[1]
+private operator fun FloatArray.component3(): Float = this[2]
+private operator fun FloatArray.component4(): Float = this[3]
+
 // ── Drag helpers ─────────────────────────────────────────────────────────────
 
 private enum class DragCorner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT, CENTER }
 
-/**
- * Determine which part of the crop rect the user touched.
- * Both [offset] (touch position) and the computed corner positions are in pixel coordinates
- * relative to the Box. The crop corners are converted from normalised (0..1) to pixels
- * using [imageDrawRect] (the actual drawn image area within the Box).
- */
 private fun nearestCorner(offset: Offset, cropRect: Rect, imageDrawRect: Rect): DragCorner {
     if (imageDrawRect.size == Size.Zero) return DragCorner.CENTER
 
-    // Convert normalised crop corners → pixel positions within the Box
     val tl = Offset(
         imageDrawRect.left + cropRect.left  * imageDrawRect.size.width,
-        imageDrawRect.top  + cropRect.top    * imageDrawRect.size.height
+        imageDrawRect.top  + cropRect.top   * imageDrawRect.size.height
     )
     val tr = Offset(
         imageDrawRect.left + cropRect.right * imageDrawRect.size.width,
-        imageDrawRect.top  + cropRect.top    * imageDrawRect.size.height
+        imageDrawRect.top  + cropRect.top   * imageDrawRect.size.height
     )
     val bl = Offset(
         imageDrawRect.left + cropRect.left  * imageDrawRect.size.width,
         imageDrawRect.top  + cropRect.bottom * imageDrawRect.size.height
     )
     val br = Offset(
-        imageDrawRect.left + cropRect.right * imageDrawRect.size.width,
+        imageDrawRect.left + cropRect.right  * imageDrawRect.size.width,
         imageDrawRect.top  + cropRect.bottom * imageDrawRect.size.height
     )
 
-    // Generous touch target for fat fingers
     val threshold = 80f
-
     val distances = mapOf(
         DragCorner.TOP_LEFT     to (offset - tl).getDistance(),
         DragCorner.TOP_RIGHT    to (offset - tr).getDistance(),
@@ -295,11 +359,6 @@ private fun nearestCorner(offset: Offset, cropRect: Rect, imageDrawRect: Rect): 
     return if (nearest != null && nearest.value < threshold) nearest.key else DragCorner.CENTER
 }
 
-/**
- * Resize or translate the crop rect.
- * Corner drags maintain a 1:1 aspect ratio; CENTER drag translates the whole rect.
- * [dx]/[dy] are in normalised fractions relative to the image area.
- */
 private fun moveCorner(rect: Rect, corner: DragCorner?, dx: Float, dy: Float): Rect {
     val minSize = 0.05f
     return when (corner) {
@@ -336,32 +395,4 @@ private fun moveCorner(rect: Rect, corner: DragCorner?, dx: Float, dy: Float): R
         }
         null -> rect
     }
-}
-
-/**
- * Rotate an [Offset] (touch position in Box pixel space) by [degrees] around the centre
- * of [imageDrawRect]. Used to convert unrotated touch coords into the visual coordinate space.
- */
-private fun rotateOffset(offset: Offset, degrees: Int, imageDrawRect: Rect): Offset {
-    if (degrees == 0) return offset
-    val cx = imageDrawRect.left + imageDrawRect.size.width / 2f
-    val cy = imageDrawRect.top  + imageDrawRect.size.height / 2f
-    val rad = Math.toRadians(degrees.toDouble())
-    val cos = Math.cos(rad).toFloat()
-    val sin = Math.sin(rad).toFloat()
-    val dx = offset.x - cx
-    val dy = offset.y - cy
-    return Offset(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos)
-}
-
-/**
- * Rotate a drag delta vector by [degrees].
- * Used to convert unrotated drag deltas into the visual coordinate space.
- */
-private fun rotateDelta(delta: Offset, degrees: Int): Offset {
-    if (degrees == 0) return delta
-    val rad = Math.toRadians(degrees.toDouble())
-    val cos = Math.cos(rad).toFloat()
-    val sin = Math.sin(rad).toFloat()
-    return Offset(delta.x * cos - delta.y * sin, delta.x * sin + delta.y * cos)
 }

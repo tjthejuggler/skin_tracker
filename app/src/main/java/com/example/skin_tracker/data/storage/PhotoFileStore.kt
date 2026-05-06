@@ -75,7 +75,13 @@ class PhotoFileStore(private val context: Context) {
 
     /**
      * Crop an image file to the specified region and overwrite it.
-     * Optionally rotate the image by [rotationDegrees] (multiples of 90) before saving.
+     *
+     * IMPORTANT: [left], [top], [right], [bottom] are in ORIGINAL (un-rotated) bitmap pixel
+     * coordinates. The crop is applied first, then [rotationDegrees] (multiple of 90) is
+     * applied to the cropped result. This ordering avoids any rotation-direction ambiguity
+     * when computing pixel coordinates upstream.
+     *
+     * Disables BitmapFactory density scaling so bitmap.width/height match the file on disk.
      */
     fun crop(
         path: String,
@@ -85,17 +91,22 @@ class PhotoFileStore(private val context: Context) {
         bottom: Int,
         rotationDegrees: Int = 0
     ): Boolean {
-        var bitmap = BitmapFactory.decodeFile(path) ?: return false
+        val options = BitmapFactory.Options().apply { inScaled = false }
+        val bitmap = BitmapFactory.decodeFile(path, options) ?: return false
 
-        // Apply rotation first if needed
+        // 1. Crop in original bitmap coordinates
+        val safeLeft = left.coerceIn(0, bitmap.width - 1)
+        val safeTop = top.coerceIn(0, bitmap.height - 1)
+        val w = (right - safeLeft).coerceIn(1, bitmap.width - safeLeft)
+        val h = (bottom - safeTop).coerceIn(1, bitmap.height - safeTop)
+        var cropped = Bitmap.createBitmap(bitmap, safeLeft, safeTop, w, h)
+
+        // 2. Apply rotation AFTER cropping
         if (rotationDegrees != 0) {
             val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-            bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            cropped = Bitmap.createBitmap(cropped, 0, 0, cropped.width, cropped.height, matrix, true)
         }
 
-        val w = (right - left).coerceIn(1, bitmap.width - left)
-        val h = (bottom - top).coerceIn(1, bitmap.height - top)
-        val cropped = Bitmap.createBitmap(bitmap, left.coerceAtLeast(0), top.coerceAtLeast(0), w, h)
         FileOutputStream(path).use { out ->
             cropped.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
         }
