@@ -69,6 +69,14 @@ class PhotoDetailViewModel(
         }
     }
 
+    fun updateCapturedAt(newCapturedAt: Long) {
+        val photo = _state.value.photo ?: return
+        viewModelScope.launch {
+            photoRepository.updateCapturedAt(photo.id, newCapturedAt)
+            loadPhoto(photo.id)
+        }
+    }
+
     fun setCurrentIndex(index: Int) {
         _state.value = _state.value.copy(currentIndex = index)
     }

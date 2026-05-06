@@ -39,6 +39,9 @@ interface PhotoDao {
     @Query("DELETE FROM photos WHERE id = :id")
     suspend fun hardDelete(id: Long)
 
+    @Query("UPDATE photos SET capturedAt = :capturedAt WHERE id = :id")
+    suspend fun updateCapturedAt(id: Long, capturedAt: Long)
+
     @Query("SELECT * FROM photos")
     suspend fun getAllSync(): List<PhotoEntity>
 

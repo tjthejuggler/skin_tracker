@@ -2,6 +2,7 @@ package com.example.skin_tracker.util
 
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import java.io.InputStream
 import java.text.SimpleDateFormat
@@ -29,14 +30,25 @@ object ExifDateReader {
             if (date != null) return date.time
         }
 
-        // Fallback: file lastModified
+        // Fallback: MediaStore date_taken or date_modified (stored in seconds, convert to ms)
         try {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            val projection = arrayOf(
+                MediaStore.MediaColumns.DATE_TAKEN,
+                MediaStore.MediaColumns.DATE_MODIFIED
+            )
+            val cursor = context.contentResolver.query(uri, projection, null, null, null)
             cursor?.use {
-                val lastModifiedIndex = it.getColumnIndex("last_modified")
-                if (lastModifiedIndex >= 0 && it.moveToFirst()) {
-                    val lastModified = it.getLong(lastModifiedIndex)
-                    if (lastModified > 0) return lastModified
+                if (it.moveToFirst()) {
+                    val dateTakenIndex = it.getColumnIndex(MediaStore.MediaColumns.DATE_TAKEN)
+                    if (dateTakenIndex >= 0) {
+                        val dateTaken = it.getLong(dateTakenIndex)
+                        if (dateTaken > 0) return dateTaken // DATE_TAKEN is already in ms
+                    }
+                    val dateModifiedIndex = it.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                    if (dateModifiedIndex >= 0) {
+                        val dateModified = it.getLong(dateModifiedIndex)
+                        if (dateModified > 0) return dateModified * 1000L // DATE_MODIFIED is in seconds
+                    }
                 }
             }
         } catch (_: Exception) {

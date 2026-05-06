@@ -1,5 +1,6 @@
 package com.example.skin_tracker.ui.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,9 +13,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +44,7 @@ import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Photo
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -102,7 +108,10 @@ fun PhotoDetailScreen(
                 modifier = Modifier.weight(1f)
             ) { page ->
                 val photo = state.sameDayPhotos[page]
-                PhotoDetailView(photo = photo)
+                PhotoDetailView(
+                    photo = photo,
+                    onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) }
+                )
             }
 
             if (state.sameDayPhotos.size > 1) {
@@ -143,7 +152,9 @@ fun PhotoDetailScreen(
 }
 
 @Composable
-private fun PhotoDetailView(photo: Photo) {
+private fun PhotoDetailView(photo: Photo, onDateChanged: (Long) -> Unit) {
+    var showDatePicker by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -162,10 +173,36 @@ private fun PhotoDetailView(photo: Photo) {
         Spacer(modifier = Modifier.height(12.dp))
 
         val sdf = SimpleDateFormat("EEEE, MMM d, yyyy 'at' HH:mm", Locale.getDefault())
-        Text(
-            text = sdf.format(Date(photo.capturedAt)),
-            style = MaterialTheme.typography.titleSmall
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .clickable { showDatePicker = true }
+                .padding(4.dp)
+        ) {
+            Icon(
+                Icons.Default.CalendarToday,
+                contentDescription = "Change date",
+                modifier = Modifier.padding(end = 6.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = sdf.format(Date(photo.capturedAt)),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        if (showDatePicker) {
+            PhotoDatePickerDialog(
+                currentCapturedAt = photo.capturedAt,
+                onConfirm = { newDate ->
+                    showDatePicker = false
+                    onDateChanged(newDate)
+                },
+                onDismiss = { showDatePicker = false }
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -225,5 +262,51 @@ private fun PhotoDetailView(photo: Photo) {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PhotoDatePickerDialog(
+    currentCapturedAt: Long,
+    onConfirm: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // Preserve the time-of-day from the original timestamp
+    val originalCal = Calendar.getInstance().apply { timeInMillis = currentCapturedAt }
+    val hour = originalCal.get(Calendar.HOUR_OF_DAY)
+    val minute = originalCal.get(Calendar.MINUTE)
+    val second = originalCal.get(Calendar.SECOND)
+
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = currentCapturedAt
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis ?: return@TextButton
+                    // Combine the selected date with the original time-of-day
+                    val newCal = Calendar.getInstance().apply {
+                        timeInMillis = selectedMillis
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, second)
+                    }
+                    onConfirm(newCal.timeInMillis)
+                }
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    ) {
+        DatePicker(state = datePickerState)
     }
 }

@@ -51,4 +51,7 @@ class PhotoRepository(private val photoDao: PhotoDao) {
 
     suspend fun countByCategory(category: Category): Int =
         photoDao.countByCategory(category.name)
+
+    suspend fun updateCapturedAt(id: Long, capturedAt: Long) =
+        photoDao.updateCapturedAt(id, capturedAt)
 }
