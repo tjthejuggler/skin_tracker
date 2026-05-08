@@ -5,12 +5,14 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -109,7 +111,7 @@ fun CaptureScreen(
         } else if (hasCameraPermission) {
             CameraPreview(
                 lifecycleOwner = lifecycleOwner,
-                onImageCaptured = { viewModel.onImageCaptured(it) }
+                onImageCaptured = { image, isFront -> viewModel.onImageCaptured(image, isFront) }
             )
 
             // Category toggle
@@ -155,17 +157,20 @@ fun CaptureScreen(
 @Composable
 private fun CameraPreview(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    onImageCaptured: (androidx.camera.core.ImageProxy) -> Unit
+    onImageCaptured: (androidx.camera.core.ImageProxy, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
-    val imageCapture = remember { ImageCapture.Builder().build() }
+    val imageCapture = remember { ImageCapture.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).build() }
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
-                val previewView = PreviewView(ctx)
+                val previewView = PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FIT_CENTER
+                    setBackgroundColor(AndroidColor.BLACK)
+                }
                 val executor = ContextCompat.getMainExecutor(ctx)
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
@@ -225,7 +230,8 @@ private fun CameraPreview(
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
-                            onImageCaptured(image)
+                            val isFront = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+                            onImageCaptured(image, isFront)
                         }
                         override fun onError(exception: ImageCaptureException) { }
                     }

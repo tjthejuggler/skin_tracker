@@ -15,7 +15,6 @@ import com.example.skin_tracker.data.repo.PhotoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 
 class CaptureViewModel(
     private val photoRepository: PhotoRepository,
@@ -38,7 +37,7 @@ class CaptureViewModel(
         _category.value = cat
     }
 
-    fun onImageCaptured(imageProxy: ImageProxy) {
+    fun onImageCaptured(imageProxy: ImageProxy, isFrontCamera: Boolean) {
         val bitmap = imageProxy.toBitmap()
         val rotation = imageProxy.imageInfo.rotationDegrees
 
@@ -50,12 +49,17 @@ class CaptureViewModel(
             bitmap
         }
 
-        // Create a preview thumbnail
-        val previewStream = ByteArrayOutputStream()
-        rotated.compress(Bitmap.CompressFormat.JPEG, 70, previewStream)
+        // Mirror horizontally for front camera so the saved photo matches
+        // the mirrored preview the user saw while composing the shot
+        val final = if (isFrontCamera) {
+            val matrix = Matrix().apply { postScale(-1f, 1f) }
+            Bitmap.createBitmap(rotated, 0, 0, rotated.width, rotated.height, matrix, true)
+        } else {
+            rotated
+        }
 
         _pendingPhoto.value = PendingPhoto(
-            bitmap = rotated,
+            bitmap = final,
             rotation = rotation
         )
 
