@@ -6,6 +6,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 
 - **📷 In-app Camera** — Take a quick selfie each morning with front/back camera toggle
 - **🖼️ Gallery Import** — Import existing photos from your phone's gallery (uses EXIF date)
+- **🤖 Auto Face/Body Detection** — Automatically tags photos as Face or Body using on-device face detection (Android built-in FaceDetector)
 - **⚖️ Compare Mode** — Two random photos shown side-by-side; tap the one where your skin looks better
 - **📊 Interactive Charts** — Zoomable, pannable Elo rating chart with time-range filters (1W/1M/3M/6M/1Y/All), daily average overlay, and tap-to-view photo details
 - **🏷️ Categories** — Face and Body tracked separately
@@ -41,7 +42,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 
 ## How It Works
 
-1. **Capture or Import** — Add photos via the camera or gallery import. Each photo is tagged as Face or Body.
+1. **Capture or Import** — Add photos via the camera or gallery import. Photos are automatically tagged as Face or Body using on-device face detection; you can still override with the toggle.
 2. **Compare** — The app shows you two random photos from the same category. Tap the one where your psoriasis looks better. The Elo rating updates for both photos.
 3. **Track** — The chart screen shows your Elo rating over time. Per-photo data points are connected by a line; a dashed daily-average overlay appears when a day has multiple photos.
 4. **Pair Selection** — Random within category, biased toward photos with fewer comparisons so new uploads catch up faster.
@@ -70,7 +71,9 @@ com.example.skin_tracker/
 │   ├── gallery/                   (GalleryScreen, GalleryViewModel)
 │   ├── detail/                    (PhotoDetailScreen, PhotoDetailViewModel)
 │   └── theme/                     (Color, Theme, Type)
-└── util/ExifDateReader.kt
+└── util/
+    ├── ExifDateReader.kt
+    └── FaceDetectorUtil.kt   (on-device face detection)
 ```
 
 ## Changelog
@@ -84,3 +87,9 @@ com.example.skin_tracker/
 - Photo detail screen with swipe pager and delete
 - Room database with Photo and Comparison entities
 - App-private file storage with auto-downscaling to 2048px
+
+### 2026-05-08 — Auto Face/Body Detection
+- Added `FaceDetectorUtil` using Android's built-in `android.media.FaceDetector` (zero dependencies)
+- Camera capture auto-detects face vs body and pre-selects the category
+- Gallery import auto-detects per photo (removed the category selection dialog)
+- Users can still manually override the category via the toggle

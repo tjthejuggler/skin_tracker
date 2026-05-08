@@ -12,6 +12,7 @@ import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.data.repo.PhotoRepository
+import com.example.skin_tracker.util.FaceDetectorUtil
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -57,6 +58,10 @@ class CaptureViewModel(
         } else {
             rotated
         }
+
+        // Auto-detect face vs body
+        val detected = if (FaceDetectorUtil.hasFace(final)) Category.FACE else Category.BODY
+        _category.value = detected
 
         _pendingPhoto.value = PendingPhoto(
             bitmap = final,

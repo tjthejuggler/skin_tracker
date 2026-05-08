@@ -114,30 +114,6 @@ fun CaptureScreen(
                 onImageCaptured = { image, isFront -> viewModel.onImageCaptured(image, isFront) }
             )
 
-            // Category toggle
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(16.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Category.entries.forEach { cat ->
-                    val selected = cat == category
-                    FilledTonalButton(
-                        onClick = { viewModel.setCategory(cat) },
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Text(
-                            text = cat.label,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         } else {
             Column(
                 modifier = Modifier.fillMaxSize(),

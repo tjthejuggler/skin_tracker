@@ -19,6 +19,16 @@ class PhotoFileStore(private val context: Context) {
     }
 
     /**
+     * Load a bitmap from an absolute file path.
+     * Returns null if the file doesn't exist or can't be decoded.
+     */
+    fun loadBitmap(absolutePath: String): Bitmap? {
+        val file = File(absolutePath)
+        if (!file.exists()) return null
+        return BitmapFactory.decodeFile(absolutePath)
+    }
+
+    /**
      * Save a bitmap from the camera to app-private storage.
      * @return absolute file path
      */

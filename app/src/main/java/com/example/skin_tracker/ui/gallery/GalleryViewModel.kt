@@ -11,6 +11,7 @@ import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.util.ExifDateReader
+import com.example.skin_tracker.util.FaceDetectorUtil
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +49,11 @@ class GalleryViewModel(
         }
     }
 
-    fun importFromGallery(uris: List<Uri>, category: Category, context: android.content.Context) {
+    /**
+     * Import photos from gallery URIs. Category is auto-detected per photo
+     * using face detection (FACE if a face is found, BODY otherwise).
+     */
+    fun importFromGallery(uris: List<Uri>, context: android.content.Context) {
         _isImporting.value = true
         _importCount.value = 0
 
@@ -59,6 +64,11 @@ class GalleryViewModel(
                     val relativePath = photoFileStore.copyFromUri(uri)
                     val capturedAt = ExifDateReader.readCapturedAt(context, uri)
                     val now = System.currentTimeMillis()
+
+                    // Auto-detect category from the saved file
+                    val category = photoFileStore.loadBitmap(relativePath)?.let {
+                        if (FaceDetectorUtil.hasFace(it)) Category.FACE else Category.BODY
+                    } ?: Category.BODY
 
                     val photo = Photo(
                         uri = relativePath,
