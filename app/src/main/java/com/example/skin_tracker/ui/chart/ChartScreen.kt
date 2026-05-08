@@ -159,23 +159,22 @@ fun ChartScreen(
                         }
 
                         legend.textColor = Color.WHITE
-
-                        setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
-                            override fun onValueSelected(e: Entry, h: Highlight) {
-                                // Find the closest photo by capturedAt
-                                val photo = photos.minByOrNull {
-                                    Math.abs(it.capturedAt - e.x.toLong()) + Math.abs(it.rating - e.y.toDouble())
-                                }
-                                if (photo != null) {
-                                    onPhotoSelected(photo)
-                                }
-                            }
-
-                            override fun onNothingSelected() {}
-                        })
                     }
                 },
                 update = { chart ->
+                    // Re-register listener here so it always captures the current photos list
+                    chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+                        override fun onValueSelected(e: Entry, h: Highlight) {
+                            val photo = photos.minByOrNull {
+                                Math.abs(it.capturedAt - e.x.toLong()) + Math.abs(it.rating - e.y.toDouble())
+                            }
+                            if (photo != null) {
+                                onPhotoSelected(photo)
+                            }
+                        }
+
+                        override fun onNothingSelected() {}
+                    })
                     updateChart(chart, photos)
                 },
                 modifier = Modifier
