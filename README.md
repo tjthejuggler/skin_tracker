@@ -12,6 +12,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **🏷️ Categories** — Face and Body tracked separately
 - **📈 Elo Rating** — Each photo starts at 1500; comparisons update ratings using K=32 Elo system
 - **🔍 Photo Detail** — Full-screen view with swipe between same-day photos, rating stats, and delete
+- **🔗 Tail App Integration** — Automatically increment a habit in the Tail habits app whenever a new photo is added (captured or imported)
 
 ## Tech Stack
 
@@ -57,19 +58,21 @@ com.example.skin_tracker/
 ├── data/
 │   ├── db/                        (Room: AppDatabase, DAOs)
 │   ├── entity/                    (PhotoEntity, ComparisonEntity)
+│   ├── ipc/                       (HabitIntegrationRepository — Tail IPC)
 │   ├── repo/                      (PhotoRepository, ComparisonRepository)
 │   └── storage/PhotoFileStore.kt  (file I/O, downscaling)
 ├── domain/
-│   ├── model/                     (Category, Photo)
+│   ├── model/                     (Category, Photo, HabitEntry)
 │   └── rating/                    (Elo, PairPicker)
 ├── ui/
 │   ├── Navigation.kt
-│   ├── SkinTrackerApp.kt          (NavHost + bottom bar)
+│   ├── SkinTrackerApp.kt          (NavHost + bottom bar + settings)
 │   ├── chart/                     (ChartScreen, ChartViewModel)
 │   ├── compare/                   (CompareScreen, CompareViewModel)
 │   ├── capture/                   (CaptureScreen, CaptureViewModel)
 │   ├── gallery/                   (GalleryScreen, GalleryViewModel)
 │   ├── detail/                    (PhotoDetailScreen, PhotoDetailViewModel)
+│   ├── settings/                  (SettingsScreen, SettingsViewModel)
 │   └── theme/                     (Color, Theme, Type)
 └── util/
     ├── ExifDateReader.kt
@@ -93,3 +96,11 @@ com.example.skin_tracker/
 - Camera capture auto-detects face vs body and pre-selects the category
 - Gallery import auto-detects per photo (removed the category selection dialog)
 - Users can still manually override the category via the toggle
+
+### 2026-05-09 — Tail App Integration
+- Added Settings screen accessible from the top app bar gear icon
+- Integrated with the Tail habits app via ContentProvider (fetch habits) and explicit broadcast (increment habit)
+- Single "Photo Added" slot: when a photo is captured or imported, the selected Tail habit is incremented
+- `HabitIntegrationRepository` handles all IPC (ContentProvider query + permission-guarded broadcast)
+- Added `com.example.tail.permission.TAIL_INTEGRATION` permission to manifest
+- Persisted habit selection in dedicated SharedPreferences file

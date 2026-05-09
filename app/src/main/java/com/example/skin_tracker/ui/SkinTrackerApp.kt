@@ -6,11 +6,15 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -30,6 +34,7 @@ import com.example.skin_tracker.ui.detail.PhotoDetailScreen
 import com.example.skin_tracker.ui.edit.EditPhotoScreen
 import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.history.HistoryScreen
+import com.example.skin_tracker.ui.settings.SettingsScreen
 
 data class BottomNavItem(
     val screen: Screen,
@@ -44,6 +49,7 @@ val bottomNavItems = listOf(
     BottomNavItem(Screen.Gallery, "Gallery", Icons.Default.PhotoLibrary)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkinTrackerApp() {
     val navController = rememberNavController()
@@ -55,6 +61,19 @@ fun SkinTrackerApp() {
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Skin Tracker") },
+                actions = {
+                    IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
+                }
+            )
+        },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
@@ -111,6 +130,11 @@ fun SkinTrackerApp() {
             }
             composable(Screen.History.route) {
                 HistoryScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
                     onBack = { navController.popBackStack() }
                 )
             }

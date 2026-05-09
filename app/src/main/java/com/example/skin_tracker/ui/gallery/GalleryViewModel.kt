@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
+import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
@@ -25,7 +26,8 @@ data class DayGroup(
 
 class GalleryViewModel(
     private val photoRepository: PhotoRepository,
-    private val photoFileStore: PhotoFileStore
+    private val photoFileStore: PhotoFileStore,
+    private val habitIntegrationRepository: HabitIntegrationRepository
 ) : ViewModel() {
 
     private val _photos = MutableStateFlow<List<Photo>>(emptyList())
@@ -77,6 +79,7 @@ class GalleryViewModel(
                         importedAt = now
                     )
                     photoRepository.insert(photo)
+                    habitIntegrationRepository.sendHabitIncrement(HabitIntegrationRepository.Slot.PHOTO_ADDED)
                     count++
                     _importCount.value = count
                 } catch (e: Exception) {
@@ -114,7 +117,7 @@ class GalleryViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val container = (application as SkinTrackerApp).container
-            return GalleryViewModel(container.photoRepository, container.photoFileStore) as T
+            return GalleryViewModel(container.photoRepository, container.photoFileStore, container.habitIntegrationRepository) as T
         }
     }
 }

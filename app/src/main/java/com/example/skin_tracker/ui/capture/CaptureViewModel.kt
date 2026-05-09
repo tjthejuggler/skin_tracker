@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
+import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
 import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
@@ -19,7 +20,8 @@ import kotlinx.coroutines.launch
 
 class CaptureViewModel(
     private val photoRepository: PhotoRepository,
-    private val photoFileStore: PhotoFileStore
+    private val photoFileStore: PhotoFileStore,
+    private val habitIntegrationRepository: HabitIntegrationRepository
 ) : ViewModel() {
 
     private val _category = MutableStateFlow(Category.FACE)
@@ -88,6 +90,7 @@ class CaptureViewModel(
                 )
 
                 photoRepository.insert(photo)
+                habitIntegrationRepository.sendHabitIncrement(HabitIntegrationRepository.Slot.PHOTO_ADDED)
                 _saveComplete.value = true
                 _pendingPhoto.value = null
             } finally {
@@ -113,7 +116,7 @@ class CaptureViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val container = (application as SkinTrackerApp).container
-            return CaptureViewModel(container.photoRepository, container.photoFileStore) as T
+            return CaptureViewModel(container.photoRepository, container.photoFileStore, container.habitIntegrationRepository) as T
         }
     }
 }
