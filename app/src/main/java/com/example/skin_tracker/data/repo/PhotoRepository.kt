@@ -54,4 +54,7 @@ class PhotoRepository(private val photoDao: PhotoDao) {
 
     suspend fun updateCapturedAt(id: Long, capturedAt: Long) =
         photoDao.updateCapturedAt(id, capturedAt)
+
+    suspend fun updateCategoryAndResetStats(id: Long, category: Category) =
+        photoDao.updateCategoryAndResetStats(id, category.name)
 }

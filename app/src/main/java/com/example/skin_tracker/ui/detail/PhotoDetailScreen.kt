@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import java.io.File
 import java.text.SimpleDateFormat
@@ -110,7 +111,8 @@ fun PhotoDetailScreen(
                 val photo = state.sameDayPhotos[page]
                 PhotoDetailView(
                     photo = photo,
-                    onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) }
+                    onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) },
+                    onCategoryChange = { newCategory -> viewModel.changeCategory(newCategory) }
                 )
             }
 
@@ -152,8 +154,13 @@ fun PhotoDetailScreen(
 }
 
 @Composable
-private fun PhotoDetailView(photo: Photo, onDateChanged: (Long) -> Unit) {
+private fun PhotoDetailView(
+    photo: Photo,
+    onDateChanged: (Long) -> Unit,
+    onCategoryChange: (Category) -> Unit
+) {
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCategoryDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -171,6 +178,25 @@ private fun PhotoDetailView(photo: Photo, onDateChanged: (Long) -> Unit) {
         )
 
         Spacer(modifier = Modifier.height(12.dp))
+
+        // Category chip - clickable to change
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .clickable { showCategoryDialog = true }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = photo.category.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         val sdf = SimpleDateFormat("EEEE, MMM d, yyyy 'at' HH:mm", Locale.getDefault())
         Row(
@@ -201,6 +227,17 @@ private fun PhotoDetailView(photo: Photo, onDateChanged: (Long) -> Unit) {
                     onDateChanged(newDate)
                 },
                 onDismiss = { showDatePicker = false }
+            )
+        }
+
+        if (showCategoryDialog) {
+            CategoryChangeDialog(
+                currentCategory = photo.category,
+                onConfirm = { newCategory ->
+                    showCategoryDialog = false
+                    onCategoryChange(newCategory)
+                },
+                onDismiss = { showCategoryDialog = false }
             )
         }
 
@@ -309,4 +346,66 @@ private fun PhotoDatePickerDialog(
     ) {
         DatePicker(state = datePickerState)
     }
+}
+
+@Composable
+private fun CategoryChangeDialog(
+    currentCategory: Category,
+    onConfirm: (Category) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedCategory by remember { mutableStateOf(currentCategory) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Change Image Type") },
+        text = {
+            Column {
+                Text(
+                    "Changing the image type will permanently delete all rating history " +
+                        "for this photo and reset its rating to 1500. This cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Category.entries.forEach { category ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedCategory = category }
+                            .padding(vertical = 8.dp)
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = selectedCategory == category,
+                            onClick = { selectedCategory = category }
+                        )
+                        Text(
+                            text = category.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(selectedCategory) },
+                enabled = selectedCategory != currentCategory
+            ) {
+                Text(
+                    "Change",
+                    color = if (selectedCategory != currentCategory)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

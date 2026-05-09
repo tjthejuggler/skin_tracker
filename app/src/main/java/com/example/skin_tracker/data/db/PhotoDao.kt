@@ -47,4 +47,7 @@ interface PhotoDao {
 
     @Query("SELECT COUNT(*) FROM photos WHERE deleted = 0 AND category = :category")
     suspend fun countByCategory(category: String): Int
+
+    @Query("UPDATE photos SET category = :category, rating = 1500.0, comparisonCount = 0, wins = 0, losses = 0 WHERE id = :id")
+    suspend fun updateCategoryAndResetStats(id: Long, category: String)
 }

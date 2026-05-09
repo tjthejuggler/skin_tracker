@@ -8,6 +8,7 @@ import com.example.skin_tracker.SkinTrackerApp
 import com.example.skin_tracker.data.repo.ComparisonRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.data.storage.PhotoFileStore
+import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +74,18 @@ class PhotoDetailViewModel(
         val photo = _state.value.photo ?: return
         viewModelScope.launch {
             photoRepository.updateCapturedAt(photo.id, newCapturedAt)
+            loadPhoto(photo.id)
+        }
+    }
+
+    fun changeCategory(newCategory: Category) {
+        val photo = _state.value.photo ?: return
+        viewModelScope.launch {
+            // Wipe all comparisons involving this photo
+            comparisonRepository.deleteByPhotoId(photo.id)
+            // Update category and reset rating stats
+            photoRepository.updateCategoryAndResetStats(photo.id, newCategory)
+            // Reload to reflect changes
             loadPhoto(photo.id)
         }
     }
