@@ -13,6 +13,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **📈 Elo Rating** — Each photo starts at 1500; comparisons update ratings using K=32 Elo system
 - **🔍 Photo Detail** — Full-screen view with swipe between same-day photos, rating stats, and delete
 - **🔗 Tail App Integration** — Automatically increment a habit in the Tail habits app whenever a new photo is added (captured or imported)
+- **🐛 Debug Bubble** — Floating draggable bubble overlay for logging bugs, features, and notes per-screen; saves to `debug_skin_tracker.json` for LLM-assisted debugging
 
 ## Tech Stack
 
@@ -58,18 +59,20 @@ com.example.skin_tracker/
 ├── data/
 │   ├── db/                        (Room: AppDatabase, DAOs)
 │   ├── entity/                    (PhotoEntity, ComparisonEntity)
+│   ├── debug/                     (DebugPreferences, DebugNoteRepository, ScreenContextMapper)
 │   ├── ipc/                       (HabitIntegrationRepository — Tail IPC)
 │   ├── repo/                      (PhotoRepository, ComparisonRepository)
 │   └── storage/PhotoFileStore.kt  (file I/O, downscaling)
 ├── domain/
-│   ├── model/                     (Category, Photo, HabitEntry)
+│   ├── model/                     (Category, Photo, HabitEntry, DebugNote, NoteType)
 │   └── rating/                    (Elo, PairPicker)
 ├── ui/
 │   ├── Navigation.kt
-│   ├── SkinTrackerApp.kt          (NavHost + bottom bar + settings)
+│   ├── SkinTrackerApp.kt          (NavHost + bottom bar + debug bubble)
 │   ├── chart/                     (ChartScreen, ChartViewModel)
 │   ├── compare/                   (CompareScreen, CompareViewModel)
 │   ├── capture/                   (CaptureScreen, CaptureViewModel)
+│   ├── debug/                     (DebugBubbleOverlay, DebugNoteDialog)
 │   ├── gallery/                   (GalleryScreen, GalleryViewModel)
 │   ├── detail/                    (PhotoDetailScreen, PhotoDetailViewModel)
 │   ├── settings/                  (SettingsScreen, SettingsViewModel)
@@ -104,3 +107,12 @@ com.example.skin_tracker/
 - `HabitIntegrationRepository` handles all IPC (ContentProvider query + permission-guarded broadcast)
 - Added `com.example.tail.permission.TAIL_INTEGRATION` permission to manifest
 - Persisted habit selection in dedicated SharedPreferences file
+
+### 2026-05-13 — Debug Bubble Overlay
+- Added floating draggable debug bubble overlay visible on all screens when enabled
+- Three-tab dialog: Note (compose), Queue (batch submit), Saved (persisted notes)
+- Notes tagged with Bug/Feature/Note type and current screen context (source file + functions)
+- Submit appends to `debug_skin_tracker.json` (accumulates across submissions, unlike wags which replaces)
+- Settings screen includes Debug Mode toggle and optional SAF directory picker for JSON output
+- `DebugPreferences` persists debug mode, directory URI, saved notes, and queued notes
+- `ScreenContextMapper` maps skin_tracker routes to source file context for LLM debugging

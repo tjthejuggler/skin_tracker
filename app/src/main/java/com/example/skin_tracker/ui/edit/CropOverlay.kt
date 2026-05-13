@@ -364,26 +364,22 @@ private fun moveCorner(rect: Rect, corner: DragCorner?, dx: Float, dy: Float): R
     return when (corner) {
         DragCorner.TOP_LEFT -> {
             val newLeft = (rect.left + dx).coerceIn(0f, rect.right - minSize)
-            val newWidth = rect.right - newLeft
-            val newTop = (rect.bottom - newWidth).coerceIn(0f, rect.bottom - minSize)
+            val newTop = (rect.top + dy).coerceIn(0f, rect.bottom - minSize)
             Rect(newLeft, newTop, rect.right, rect.bottom)
         }
         DragCorner.TOP_RIGHT -> {
             val newRight = (rect.right + dx).coerceIn(rect.left + minSize, 1f)
-            val newWidth = newRight - rect.left
-            val newTop = (rect.bottom - newWidth).coerceIn(0f, rect.bottom - minSize)
+            val newTop = (rect.top + dy).coerceIn(0f, rect.bottom - minSize)
             Rect(rect.left, newTop, newRight, rect.bottom)
         }
         DragCorner.BOTTOM_LEFT -> {
             val newLeft = (rect.left + dx).coerceIn(0f, rect.right - minSize)
-            val newWidth = rect.right - newLeft
-            val newBottom = (rect.top + newWidth).coerceIn(rect.top + minSize, 1f)
+            val newBottom = (rect.bottom + dy).coerceIn(rect.top + minSize, 1f)
             Rect(newLeft, rect.top, rect.right, newBottom)
         }
         DragCorner.BOTTOM_RIGHT -> {
             val newRight = (rect.right + dx).coerceIn(rect.left + minSize, 1f)
-            val newWidth = newRight - rect.left
-            val newBottom = (rect.top + newWidth).coerceIn(rect.top + minSize, 1f)
+            val newBottom = (rect.bottom + dy).coerceIn(rect.top + minSize, 1f)
             Rect(rect.left, rect.top, newRight, newBottom)
         }
         DragCorner.CENTER -> {

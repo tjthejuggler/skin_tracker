@@ -1,5 +1,8 @@
 package com.example.skin_tracker.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +27,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,6 +58,18 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadHabits()
+    }
+
+    val context = LocalContext.current
+    val debugDirLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(it, flags)
+            viewModel.setDebugFileDir(uri.toString())
+        }
     }
 
     Scaffold(
@@ -90,6 +107,15 @@ fun SettingsScreen(
                     viewModel.clearHabit(HabitIntegrationRepository.Slot.PHOTO_ADDED)
                 },
                 onRefresh = { viewModel.loadHabits() }
+            )
+
+            // ── Debug Mode ───────────────────────────────────────────────
+            DebugModeCard(
+                debugModeEnabled = state.debugModeEnabled,
+                debugFileDirUri = state.debugFileDirUri,
+                onToggleDebugMode = { viewModel.setDebugModeEnabled(it) },
+                onChooseDirectory = { debugDirLauncher.launch(null) },
+                onClearDirectory = { viewModel.clearDebugFileDir() }
             )
         }
     }
@@ -266,6 +292,121 @@ private fun HabitPickerRow(
             )
             if (isSelected) {
                 Text("✓", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+// ── Debug Mode card ──────────────────────────────────────────────────────────
+
+@Composable
+private fun DebugModeCard(
+    debugModeEnabled: Boolean,
+    debugFileDirUri: String,
+    onToggleDebugMode: (Boolean) -> Unit,
+    onChooseDirectory: () -> Unit,
+    onClearDirectory: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("🐛 Debug Mode", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Show a floating bubble on every screen. Tap it to log bugs, features, or notes " +
+                    "that are saved with the current screen's source file info to debug_skin_tracker.json.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Enable/disable toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Enable Debug Bubble", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (debugModeEnabled) "Bubble is visible" else "Bubble is hidden",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (debugModeEnabled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = debugModeEnabled,
+                    onCheckedChange = onToggleDebugMode,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = Color(0xFF4CAF50),
+                        checkedThumbColor = Color.White
+                    )
+                )
+            }
+
+            // File directory (only shown when debug mode is on)
+            if (debugModeEnabled) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Text(
+                    "Choose the folder where debug_skin_tracker.json will be written.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (debugFileDirUri.isNotBlank()) {
+                            val displayPath = try {
+                                Uri.parse(debugFileDirUri).lastPathSegment ?: debugFileDirUri
+                            } catch (_: Exception) { debugFileDirUri }
+                            Text(
+                                displayPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Text(
+                                "Using app internal storage (default)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (debugFileDirUri.isNotBlank()) {
+                            IconButton(onClick = onClearDirectory, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Default.Clear,
+                                    contentDescription = "Clear",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = onChooseDirectory,
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                if (debugFileDirUri.isNotBlank()) "Change" else "Choose Folder",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
             }
         }
     }

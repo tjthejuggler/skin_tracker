@@ -1,0 +1,243 @@
+package com.example.skin_tracker.ui.debug
+
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.skin_tracker.data.debug.DebugNoteRepository
+import com.example.skin_tracker.data.debug.DebugPreferences
+import com.example.skin_tracker.data.debug.ScreenContextMapper
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+// Debug-specific colors
+internal val DebugOrange = Color(0xFFFF9800)
+internal val DebugGreen = Color(0xFF4CAF50)
+internal val DebugCyan = Color(0xFF00BCD4)
+internal val DebugRed = Color(0xFFF44336)
+
+/**
+ * A draggable floating bubble overlay for the debug mode.
+ *
+ * - Draggable around the screen
+ * - Shows a bright pulsing badge with the count of notes on the current screen
+ * - Tapping opens [DebugNoteDialog] with Save/Queue/Submit flow
+ * - Only visible when debug mode is enabled in settings
+ */
+@Composable
+fun DebugBubbleOverlay(
+    currentRoute: String?,
+    debugPrefs: DebugPreferences,
+    debugNoteRepo: DebugNoteRepository
+) {
+    val prefsSnapshot by debugPrefs.snapshot.collectAsStateWithLifecycle()
+    if (!prefsSnapshot.debugModeEnabled) return
+
+    val screenContext = remember(currentRoute) {
+        ScreenContextMapper.resolve(currentRoute)
+    }
+
+    val queue by debugNoteRepo.queue.collectAsStateWithLifecycle()
+    val savedNotes by debugNoteRepo.savedNotes.collectAsStateWithLifecycle()
+
+    val queuedCount = queue.count { it.screenRoute == currentRoute }
+    val savedCount = savedNotes.count { it.screenRoute == currentRoute }
+    val hasQueued = queuedCount > 0
+    val hasSaved = savedCount > 0
+    val totalQueueSize = queue.size
+
+    var showNoteDialog by remember { mutableStateOf(false) }
+
+    // Drag state
+    val density = LocalDensity.current
+    val config = LocalConfiguration.current
+    val screenWidthPx = with(density) { config.screenWidthDp.dp.toPx() }
+    val screenHeightPx = with(density) { config.screenHeightDp.dp.toPx() }
+    val bubbleSize = 48.dp
+    val bubbleSizePx = with(density) { bubbleSize.toPx() }
+
+    var offsetX by remember { mutableFloatStateOf(16f) }
+    var offsetY by remember { mutableFloatStateOf(screenHeightPx * 0.4f) }
+
+    // Re-clamp position when screen dimensions change (e.g. landscape rotation)
+    LaunchedEffect(screenWidthPx, screenHeightPx) {
+        offsetX = offsetX.coerceIn(0f, screenWidthPx - bubbleSizePx)
+        offsetY = offsetY.coerceIn(0f, screenHeightPx - bubbleSizePx)
+    }
+
+    val scope = rememberCoroutineScope()
+
+    // Pulsing animation for the badge when notes exist
+    val infiniteTransition = rememberInfiniteTransition(label = "badgePulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // The bubble — draggable + clickable
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .size(bubbleSize)
+                .shadow(8.dp, CircleShape)
+                .clip(CircleShape)
+                .background(
+                    when {
+                        hasQueued -> DebugOrange.copy(alpha = pulseAlpha)
+                        hasSaved -> DebugGreen.copy(alpha = pulseAlpha)
+                        totalQueueSize > 0 -> DebugOrange.copy(alpha = 0.6f)
+                        else -> DebugCyan.copy(alpha = 0.85f)
+                    }
+                )
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        offsetX = (offsetX + dragAmount.x)
+                            .coerceIn(0f, screenWidthPx - bubbleSizePx)
+                        offsetY = (offsetY + dragAmount.y)
+                            .coerceIn(0f, screenHeightPx - bubbleSizePx)
+                    }
+                }
+                .clickable { showNoteDialog = true },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "🐛",
+                fontSize = 22.sp,
+                modifier = Modifier.align(Alignment.Center)
+            )
+
+            // Yellow badge = queued notes count on current screen
+            if (hasQueued) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 2.dp, y = (-6).dp)
+                        .size(20.dp)
+                        .shadow(4.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Color.Yellow),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = queuedCount.toString(),
+                        color = Color.Black,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Green dot = saved notes exist for this screen
+            if (hasSaved && !hasQueued) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 2.dp, y = (-6).dp)
+                        .size(14.dp)
+                        .shadow(3.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(DebugGreen)
+                )
+            }
+
+            // Small yellow dot for global queue items on other screens
+            if (totalQueueSize > 0 && !hasQueued && !hasSaved) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 2.dp, y = (-4).dp)
+                        .size(10.dp)
+                        .shadow(3.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Color.Yellow)
+                )
+            }
+        }
+    }
+
+    // Note dialog
+    if (showNoteDialog) {
+        DebugNoteDialog(
+            screenContext = screenContext,
+            currentRoute = currentRoute ?: "unknown",
+            queuedNotes = queue,
+            savedNotes = savedNotes,
+            noteCountOnScreen = queuedCount,
+            onDismiss = { showNoteDialog = false },
+            onSaveNote = { noteType, text ->
+                debugNoteRepo.saveNote(
+                    screenRoute = currentRoute ?: "unknown",
+                    screenContext = screenContext,
+                    noteType = noteType,
+                    noteText = text
+                )
+            },
+            onQueueNote = { noteType, text ->
+                debugNoteRepo.enqueueNote(
+                    screenRoute = currentRoute ?: "unknown",
+                    screenContext = screenContext,
+                    noteType = noteType,
+                    noteText = text
+                )
+            },
+            onSubmitQueue = {
+                scope.launch {
+                    debugNoteRepo.submitQueue()
+                }
+            },
+            onRemoveFromQueue = { noteId ->
+                debugNoteRepo.removeFromQueue(noteId)
+            },
+            onUpdateSavedNote = { noteId, noteType, text ->
+                debugNoteRepo.updateSavedNote(noteId, noteType, text)
+            },
+            onDeleteSavedNote = { noteId ->
+                debugNoteRepo.deleteSavedNote(noteId)
+            },
+            onQueueSavedNote = { noteId ->
+                debugNoteRepo.queueSavedNote(noteId)
+            }
+        )
+    }
+}

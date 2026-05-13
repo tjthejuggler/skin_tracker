@@ -78,6 +78,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // DocumentFile (SAF directory picker for debug notes)
+    implementation(libs.androidx.documentfile)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

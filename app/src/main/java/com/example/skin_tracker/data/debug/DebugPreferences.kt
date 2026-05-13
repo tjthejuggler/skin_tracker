@@ -1,0 +1,153 @@
+package com.example.skin_tracker.data.debug
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.example.skin_tracker.domain.model.NoteType
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Persists debug-mode settings: whether the floating bubble is enabled,
+ * the user-chosen directory URI for [debug_skin_tracker.json], and saved/queued notes
+ * so they survive app restarts.
+ */
+class DebugPreferences(private val context: Context) {
+
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    var debugModeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DEBUG_MODE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DEBUG_MODE, value).apply()
+            refresh()
+        }
+
+    /** User-chosen directory URI (from SAF folder picker) for debug_skin_tracker.json. */
+    var debugFileDirUri: String
+        get() = prefs.getString(KEY_DEBUG_DIR_URI, "") ?: ""
+        set(value) {
+            prefs.edit().putString(KEY_DEBUG_DIR_URI, value).apply()
+            refresh()
+        }
+
+    // ── Saved notes persistence ─────────────────────────────────────────────
+
+    /** Load all persisted saved notes from SharedPreferences. */
+    fun loadSavedNotes(): List<SavedNote> {
+        val json = prefs.getString(KEY_SAVED_NOTES, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(json)
+            val notes = mutableListOf<SavedNote>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                notes.add(SavedNote(
+                    id = obj.getString("id"),
+                    timestamp = obj.getString("timestamp"),
+                    screenRoute = obj.getString("screenRoute"),
+                    screenLabel = obj.getString("screenLabel"),
+                    sourceFile = obj.getString("sourceFile"),
+                    sourceFunctions = obj.getString("sourceFunctions"),
+                    noteType = NoteType.valueOf(obj.getString("noteType")),
+                    noteText = obj.getString("noteText")
+                ))
+            }
+            notes
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Persist the current saved notes list to SharedPreferences. */
+    fun saveSavedNotes(notes: List<SavedNote>) {
+        val arr = JSONArray()
+        notes.forEach { note ->
+            arr.put(JSONObject().apply {
+                put("id", note.id)
+                put("timestamp", note.timestamp)
+                put("screenRoute", note.screenRoute)
+                put("screenLabel", note.screenLabel)
+                put("sourceFile", note.sourceFile)
+                put("sourceFunctions", note.sourceFunctions)
+                put("noteType", note.noteType.name)
+                put("noteText", note.noteText)
+            })
+        }
+        prefs.edit().putString(KEY_SAVED_NOTES, arr.toString()).apply()
+    }
+
+    // ── Queued notes persistence ─────────────────────────────────────────────
+
+    /** Load all persisted queued notes from SharedPreferences. */
+    fun loadQueuedNotes(): List<QueuedNote> {
+        val json = prefs.getString(KEY_QUEUED_NOTES, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(json)
+            val notes = mutableListOf<QueuedNote>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                notes.add(QueuedNote(
+                    id = obj.getString("id"),
+                    timestamp = obj.getString("timestamp"),
+                    screenRoute = obj.getString("screenRoute"),
+                    screenLabel = obj.getString("screenLabel"),
+                    sourceFile = obj.getString("sourceFile"),
+                    sourceFunctions = obj.getString("sourceFunctions"),
+                    noteType = NoteType.valueOf(obj.getString("noteType")),
+                    noteText = obj.getString("noteText")
+                ))
+            }
+            notes
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Persist the current queued notes list to SharedPreferences. */
+    fun saveQueuedNotes(notes: List<QueuedNote>) {
+        val arr = JSONArray()
+        notes.forEach { note ->
+            arr.put(JSONObject().apply {
+                put("id", note.id)
+                put("timestamp", note.timestamp)
+                put("screenRoute", note.screenRoute)
+                put("screenLabel", note.screenLabel)
+                put("sourceFile", note.sourceFile)
+                put("sourceFunctions", note.sourceFunctions)
+                put("noteType", note.noteType.name)
+                put("noteText", note.noteText)
+            })
+        }
+        prefs.edit().putString(KEY_QUEUED_NOTES, arr.toString()).apply()
+    }
+
+    // ── Snapshot ──────────────────────────────────────────────────────────────
+
+    private val _snapshot = MutableStateFlow(buildSnapshot())
+    val snapshot: StateFlow<DebugPrefsSnapshot> = _snapshot.asStateFlow()
+
+    fun refresh() {
+        _snapshot.value = buildSnapshot()
+    }
+
+    private fun buildSnapshot() = DebugPrefsSnapshot(
+        debugModeEnabled = debugModeEnabled,
+        debugFileDirUri = debugFileDirUri
+    )
+
+    companion object {
+        private const val PREFS_NAME = "skin_tracker_debug_prefs"
+        private const val KEY_DEBUG_MODE = "debug_mode_enabled"
+        private const val KEY_DEBUG_DIR_URI = "debug_dir_uri"
+        private const val KEY_SAVED_NOTES = "debug_saved_notes_json"
+        private const val KEY_QUEUED_NOTES = "debug_queued_notes_json"
+    }
+}
+
+data class DebugPrefsSnapshot(
+    val debugModeEnabled: Boolean = false,
+    val debugFileDirUri: String = ""
+)
