@@ -72,7 +72,10 @@ fun PhotoDetailScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Photo Detail") },
+            title = {
+                val categoryLabel = state.photo?.category?.label ?: "Photo"
+                Text("$categoryLabel Photos")
+            },
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -80,7 +83,7 @@ fun PhotoDetailScreen(
             },
             actions = {
                 IconButton(onClick = {
-                    state.sameDayPhotos.getOrNull(state.currentIndex)?.let { onEditPhoto(it.id) }
+                    state.categoryPhotos.getOrNull(state.currentIndex)?.let { onEditPhoto(it.id) }
                 }) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit photo")
                 }
@@ -94,11 +97,18 @@ fun PhotoDetailScreen(
             }
         )
 
-        if (state.sameDayPhotos.isNotEmpty()) {
+        if (state.categoryPhotos.isNotEmpty()) {
             val pagerState = rememberPagerState(
                 initialPage = state.currentIndex,
-                pageCount = { state.sameDayPhotos.size }
+                pageCount = { state.categoryPhotos.size }
             )
+
+            // Sync pager when ViewModel updates currentIndex (e.g. after category change reload)
+            LaunchedEffect(state.currentIndex) {
+                if (pagerState.currentPage != state.currentIndex) {
+                    pagerState.animateScrollToPage(state.currentIndex)
+                }
+            }
 
             LaunchedEffect(pagerState.currentPage) {
                 viewModel.setCurrentIndex(pagerState.currentPage)
@@ -108,7 +118,7 @@ fun PhotoDetailScreen(
                 state = pagerState,
                 modifier = Modifier.weight(1f)
             ) { page ->
-                val photo = state.sameDayPhotos[page]
+                val photo = state.categoryPhotos[page]
                 PhotoDetailView(
                     photo = photo,
                     onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) },
@@ -116,9 +126,9 @@ fun PhotoDetailScreen(
                 )
             }
 
-            if (state.sameDayPhotos.size > 1) {
+            if (state.categoryPhotos.size > 1) {
                 Text(
-                    text = "${pagerState.currentPage + 1} of ${state.sameDayPhotos.size}",
+                    text = "${pagerState.currentPage + 1} of ${state.categoryPhotos.size}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier

@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 data class PhotoDetailState(
     val photo: Photo? = null,
-    val sameDayPhotos: List<Photo> = emptyList(),
+    val categoryPhotos: List<Photo> = emptyList(),
     val currentIndex: Int = 0,
     val isDeleted: Boolean = false
 )
@@ -34,24 +34,12 @@ class PhotoDetailViewModel(
     fun loadPhoto(photoId: Long) {
         viewModelScope.launch {
             val photo = photoRepository.getById(photoId) ?: return@launch
-            val allPhotos = photoRepository.getByCategorySync(photo.category)
-
-            // Find photos from the same day
-            val cal = java.util.Calendar.getInstance()
-            cal.timeInMillis = photo.capturedAt
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-            cal.set(java.util.Calendar.MINUTE, 0)
-            cal.set(java.util.Calendar.SECOND, 0)
-            cal.set(java.util.Calendar.MILLISECOND, 0)
-            val dayStart = cal.timeInMillis
-            val dayEnd = dayStart + 24 * 60 * 60 * 1000
-
-            val sameDay = allPhotos.filter { it.capturedAt in dayStart until dayEnd }
-            val index = sameDay.indexOfFirst { it.id == photoId }
+            val categoryPhotos = photoRepository.getByCategorySync(photo.category)
+            val index = categoryPhotos.indexOfFirst { it.id == photoId }
 
             _state.value = _state.value.copy(
                 photo = photo,
-                sameDayPhotos = sameDay,
+                categoryPhotos = categoryPhotos,
                 currentIndex = if (index >= 0) index else 0
             )
         }
@@ -91,7 +79,11 @@ class PhotoDetailViewModel(
     }
 
     fun setCurrentIndex(index: Int) {
-        _state.value = _state.value.copy(currentIndex = index)
+        val currentPhoto = _state.value.categoryPhotos.getOrNull(index)
+        _state.value = _state.value.copy(
+            currentIndex = index,
+            photo = currentPhoto ?: _state.value.photo
+        )
     }
 
     class Factory(private val application: Application) : ViewModelProvider.Factory {
