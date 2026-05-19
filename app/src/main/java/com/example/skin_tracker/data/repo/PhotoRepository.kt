@@ -57,4 +57,16 @@ class PhotoRepository(private val photoDao: PhotoDao) {
 
     suspend fun updateCategoryAndResetStats(id: Long, category: Category) =
         photoDao.updateCategoryAndResetStats(id, category.name)
+
+    suspend fun countToday(startOfDay: Long, endOfDay: Long): Int =
+        photoDao.countToday(startOfDay, endOfDay)
+
+    suspend fun getTopRated(): Photo? =
+        photoDao.getTopRated()?.toDomain()
+
+    suspend fun getTopRatedByCategory(category: Category): Photo? =
+        photoDao.getTopRatedByCategory(category.name)?.toDomain()
+
+    suspend fun getAllCapturedAtAsc(): List<Long> =
+        photoDao.getAllCapturedAtAsc()
 }

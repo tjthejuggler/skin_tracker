@@ -35,4 +35,10 @@ interface ComparisonDao {
 
     @Query("SELECT COUNT(*) FROM comparisons")
     suspend fun totalCount(): Int
+
+    @Query("SELECT COUNT(*) FROM comparisons WHERE category = :category")
+    suspend fun totalCountByCategory(category: String): Int
+
+    @Query("SELECT comparedAt FROM comparisons ORDER BY comparedAt ASC")
+    suspend fun getAllComparedAtAsc(): List<Long>
 }

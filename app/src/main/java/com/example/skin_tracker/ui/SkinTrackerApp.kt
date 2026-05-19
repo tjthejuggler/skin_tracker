@@ -17,7 +17,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +43,7 @@ import com.example.skin_tracker.ui.edit.EditPhotoScreen
 import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.history.HistoryScreen
 import com.example.skin_tracker.ui.settings.SettingsScreen
+import java.util.Calendar
 
 data class BottomNavItem(
     val screen: Screen,
@@ -56,12 +61,32 @@ val bottomNavItems = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkinTrackerApp() {
+    val context = LocalContext.current
+    val container = (context.applicationContext as SkinTrackerApp).container
+
+    // Determine start destination: go to Capture if no photos captured today
+    var startDestination by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val startOfDay = cal.timeInMillis
+        val endOfDay = startOfDay + 24 * 60 * 60 * 1000L
+
+        val todayCount = container.photoRepository.countToday(startOfDay, endOfDay)
+        startDestination = if (todayCount == 0) Screen.Capture.route else Screen.Chart.route
+    }
+
+    // Wait until we know the start destination
+    if (startDestination == null) return
+
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val currentRoute = currentDestination?.route
-
-    val container = (LocalContext.current.applicationContext as SkinTrackerApp).container
 
     val showBottomBar = bottomNavItems.any { item ->
         currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
@@ -109,7 +134,7 @@ fun SkinTrackerApp() {
         ) { innerPadding ->
             NavHost(
                 navController = navController,
-                startDestination = Screen.Chart.route,
+                startDestination = startDestination!!,
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(Screen.Chart.route) {

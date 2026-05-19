@@ -63,4 +63,10 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
 
     suspend fun totalCount(): Int =
         comparisonDao.totalCount()
+
+    suspend fun totalCountByCategory(category: Category): Int =
+        comparisonDao.totalCountByCategory(category.name)
+
+    suspend fun getAllComparedAtAsc(): List<Long> =
+        comparisonDao.getAllComparedAtAsc()
 }
