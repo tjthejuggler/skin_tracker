@@ -123,6 +123,7 @@ fun ChartScreen(
         } else {
             // Chart
             val photos = state.photos
+            val timeRange = state.timeRange
             val onPhotoSelected: (Photo) -> Unit = { photo -> viewModel.onPhotoSelected(photo) }
 
             AndroidView(
@@ -143,12 +144,6 @@ fun ChartScreen(
                         xAxis.granularity = 1f
                         xAxis.textColor = Color.WHITE
                         xAxis.gridColor = Color.argb(60, 255, 255, 255)
-                        xAxis.valueFormatter = object : ValueFormatter() {
-                            override fun getFormattedValue(value: Float): String {
-                                val sdf = SimpleDateFormat("MMM yyyy", Locale.getDefault())
-                                return sdf.format(Date(value.toLong()))
-                            }
-                        }
 
                         axisLeft.textColor = Color.WHITE
                         axisLeft.gridColor = Color.argb(60, 255, 255, 255)
@@ -162,6 +157,19 @@ fun ChartScreen(
                     }
                 },
                 update = { chart ->
+                    // Update x-axis formatter based on current time range
+                    val xPattern = when (timeRange) {
+                        TimeRange.ONE_WEEK, TimeRange.ONE_MONTH -> "d"
+                        TimeRange.THREE_MONTHS -> "M/d"
+                        else -> "MMM yyyy"
+                    }
+                    chart.xAxis.valueFormatter = object : ValueFormatter() {
+                        override fun getFormattedValue(value: Float): String {
+                            val sdf = SimpleDateFormat(xPattern, Locale.getDefault())
+                            return sdf.format(Date(value.toLong()))
+                        }
+                    }
+
                     // Re-register listener here so it always captures the current photos list
                     chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
                         override fun onValueSelected(e: Entry, h: Highlight) {

@@ -41,4 +41,7 @@ interface ComparisonDao {
 
     @Query("SELECT comparedAt FROM comparisons ORDER BY comparedAt ASC")
     suspend fun getAllComparedAtAsc(): List<Long>
+
+    @Query("SELECT COUNT(*) FROM comparisons WHERE comparedAt >= :since")
+    suspend fun countSince(since: Long): Int
 }

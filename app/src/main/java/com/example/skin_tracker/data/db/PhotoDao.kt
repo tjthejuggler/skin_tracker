@@ -60,6 +60,12 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE deleted = 0 AND category = :category ORDER BY rating DESC LIMIT 1")
     suspend fun getTopRatedByCategory(category: String): PhotoEntity?
 
+    @Query("SELECT * FROM photos WHERE deleted = 0 AND capturedAt >= :since ORDER BY rating DESC LIMIT 1")
+    suspend fun getTopRatedSince(since: Long): PhotoEntity?
+
     @Query("SELECT capturedAt FROM photos WHERE deleted = 0 ORDER BY capturedAt ASC")
     suspend fun getAllCapturedAtAsc(): List<Long>
+
+    @Query("SELECT COUNT(*) FROM photos WHERE deleted = 0 AND capturedAt >= :since")
+    suspend fun countSince(since: Long): Int
 }

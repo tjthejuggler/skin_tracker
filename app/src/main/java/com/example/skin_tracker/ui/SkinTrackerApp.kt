@@ -74,7 +74,9 @@ fun SkinTrackerApp() {
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
         val startOfDay = cal.timeInMillis
-        val endOfDay = startOfDay + 24 * 60 * 60 * 1000L
+        // Use Calendar to advance by 1 day (DST-safe, handles 23/25-hour days)
+        cal.add(Calendar.DAY_OF_MONTH, 1)
+        val endOfDay = cal.timeInMillis
 
         val todayCount = container.photoRepository.countToday(startOfDay, endOfDay)
         startDestination = if (todayCount == 0) Screen.Capture.route else Screen.Chart.route

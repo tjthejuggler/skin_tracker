@@ -69,4 +69,7 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
 
     suspend fun getAllComparedAtAsc(): List<Long> =
         comparisonDao.getAllComparedAtAsc()
+
+    suspend fun countSince(since: Long): Int =
+        comparisonDao.countSince(since)
 }

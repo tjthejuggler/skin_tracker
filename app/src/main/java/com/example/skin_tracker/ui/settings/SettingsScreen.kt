@@ -175,6 +175,8 @@ private fun StatsCard(
                 StatsRow("Total photos", "${stats.totalPhotos}")
                 StatsRow("Face photos", "${stats.facePhotos}")
                 StatsRow("Body photos", "${stats.bodyPhotos}")
+                StatsRow("This week", "${stats.photosThisWeek}")
+                StatsRow("This month", "${stats.photosThisMonth}")
 
                 HorizontalDivider()
 
@@ -183,11 +185,16 @@ private fun StatsCard(
                 StatsRow("Total comparisons", "${stats.totalComparisons}")
                 StatsRow("Face comparisons", "${stats.faceComparisons}")
                 StatsRow("Body comparisons", "${stats.bodyComparisons}")
+                StatsRow("This week", "${stats.comparisonsThisWeek}")
+                StatsRow("This month", "${stats.comparisonsThisMonth}")
+                if (stats.avgComparisonsPerDay > 0) {
+                    StatsRow("Avg / active day", String.format("%.1f", stats.avgComparisonsPerDay))
+                }
 
                 HorizontalDivider()
 
                 // Top rated section
-                StatsSectionTitle("Top Rated")
+                StatsSectionTitle("Top Rated — All Time")
                 stats.topRatedPhoto?.let { photo ->
                     TopRatedRow("Overall best", photo)
                 } ?: StatsRow("Overall best", "No photos yet")
@@ -199,6 +206,24 @@ private fun StatsCard(
                 stats.topRatedBodyPhoto?.let { photo ->
                     TopRatedRow("Best body", photo)
                 } ?: StatsRow("Best body", "No body photos yet")
+
+                HorizontalDivider()
+
+                // Top rated by period
+                StatsSectionTitle("Top Rated — This Week")
+                stats.topRatedThisWeek?.let { photo ->
+                    TopRatedRow("Best this week", photo)
+                } ?: StatsRow("Best this week", "No photos yet")
+
+                StatsSectionTitle("Top Rated — This Month")
+                stats.topRatedThisMonth?.let { photo ->
+                    TopRatedRow("Best this month", photo)
+                } ?: StatsRow("Best this month", "No photos yet")
+
+                StatsSectionTitle("Top Rated — This Year")
+                stats.topRatedThisYear?.let { photo ->
+                    TopRatedRow("Best this year", photo)
+                } ?: StatsRow("Best this year", "No photos yet")
 
                 HorizontalDivider()
 

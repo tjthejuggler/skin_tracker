@@ -67,6 +67,12 @@ class PhotoRepository(private val photoDao: PhotoDao) {
     suspend fun getTopRatedByCategory(category: Category): Photo? =
         photoDao.getTopRatedByCategory(category.name)?.toDomain()
 
+    suspend fun getTopRatedSince(since: Long): Photo? =
+        photoDao.getTopRatedSince(since)?.toDomain()
+
     suspend fun getAllCapturedAtAsc(): List<Long> =
         photoDao.getAllCapturedAtAsc()
+
+    suspend fun countSince(since: Long): Int =
+        photoDao.countSince(since)
 }

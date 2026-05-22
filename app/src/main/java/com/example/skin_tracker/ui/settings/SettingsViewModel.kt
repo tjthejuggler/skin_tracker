@@ -35,8 +35,20 @@ data class AppStats(
     val topRatedPhoto: Photo? = null,
     val topRatedFacePhoto: Photo? = null,
     val topRatedBodyPhoto: Photo? = null,
+    // Top-rated per time window
+    val topRatedThisWeek: Photo? = null,
+    val topRatedThisMonth: Photo? = null,
+    val topRatedThisYear: Photo? = null,
+    // Activity counts per time window
+    val photosThisWeek: Int = 0,
+    val photosThisMonth: Int = 0,
+    val comparisonsThisWeek: Int = 0,
+    val comparisonsThisMonth: Int = 0,
+    // Streaks
     val longestStreakDays: Int = 0,
     val currentStreakDays: Int = 0,
+    // Averages
+    val avgComparisonsPerDay: Double = 0.0,
     val isLoading: Boolean = true
 )
 
@@ -118,6 +130,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(stats = _uiState.value.stats.copy(isLoading = true))
 
+            val now = System.currentTimeMillis()
+            val weekAgo = now - 7L * 24 * 60 * 60 * 1000
+            val monthAgo = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }.timeInMillis
+            val yearAgo = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }.timeInMillis
+
             val totalComparisons = comparisonRepository.totalCount()
             val faceComparisons = comparisonRepository.totalCountByCategory(Category.FACE)
             val bodyComparisons = comparisonRepository.totalCountByCategory(Category.BODY)
@@ -129,8 +146,24 @@ class SettingsViewModel(
             val topRatedFace = photoRepository.getTopRatedByCategory(Category.FACE)
             val topRatedBody = photoRepository.getTopRatedByCategory(Category.BODY)
 
+            val topRatedWeek = photoRepository.getTopRatedSince(weekAgo)
+            val topRatedMonth = photoRepository.getTopRatedSince(monthAgo)
+            val topRatedYear = photoRepository.getTopRatedSince(yearAgo)
+
+            val photosThisWeek = photoRepository.countSince(weekAgo)
+            val photosThisMonth = photoRepository.countSince(monthAgo)
+            val comparisonsThisWeek = comparisonRepository.countSince(weekAgo)
+            val comparisonsThisMonth = comparisonRepository.countSince(monthAgo)
+
             val capturedAtList = photoRepository.getAllCapturedAtAsc()
             val (longestStreak, currentStreak) = computeStreaks(capturedAtList)
+
+            // Average comparisons per active day (days that have at least one comparison)
+            val comparedAtList = comparisonRepository.getAllComparedAtAsc()
+            val avgComparisonsPerDay = if (comparedAtList.isNotEmpty()) {
+                val activeDays = comparedAtList.map { toDayEpoch(it) }.distinct().size
+                if (activeDays > 0) totalComparisons.toDouble() / activeDays else 0.0
+            } else 0.0
 
             _uiState.value = _uiState.value.copy(
                 stats = AppStats(
@@ -143,8 +176,16 @@ class SettingsViewModel(
                     topRatedPhoto = topRated,
                     topRatedFacePhoto = topRatedFace,
                     topRatedBodyPhoto = topRatedBody,
+                    topRatedThisWeek = topRatedWeek,
+                    topRatedThisMonth = topRatedMonth,
+                    topRatedThisYear = topRatedYear,
+                    photosThisWeek = photosThisWeek,
+                    photosThisMonth = photosThisMonth,
+                    comparisonsThisWeek = comparisonsThisWeek,
+                    comparisonsThisMonth = comparisonsThisMonth,
                     longestStreakDays = longestStreak,
                     currentStreakDays = currentStreak,
+                    avgComparisonsPerDay = avgComparisonsPerDay,
                     isLoading = false
                 )
             )
