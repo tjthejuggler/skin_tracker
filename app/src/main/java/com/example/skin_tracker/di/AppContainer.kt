@@ -8,6 +8,10 @@ import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
 import com.example.skin_tracker.data.repo.ComparisonRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.data.storage.PhotoFileStore
+import com.example.skin_tracker.domain.model.Category
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class AppContainer(val context: Context) {
 
@@ -30,4 +34,11 @@ class AppContainer(val context: Context) {
     val debugPreferences by lazy { DebugPreferences(context) }
 
     val debugNoteRepository by lazy { DebugNoteRepository(context, debugPreferences) }
+    /** Shared category selection synced between Compare and Chart screens. */
+    private val _sharedCategory = MutableStateFlow(Category.FACE)
+    val sharedCategory: StateFlow<Category> = _sharedCategory.asStateFlow()
+
+    fun setSharedCategory(category: Category) {
+        _sharedCategory.value = category
+    }
 }

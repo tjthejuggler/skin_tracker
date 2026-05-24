@@ -17,4 +17,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // Fully close the app when the user minimizes it (presses Home or switches away).
+    // This prevents the app from running in the background.
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            finishAndRemoveTask()
+        }
+    }
 }

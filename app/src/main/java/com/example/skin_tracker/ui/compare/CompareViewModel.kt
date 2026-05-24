@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
 import com.example.skin_tracker.data.repo.ComparisonRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
+import com.example.skin_tracker.di.AppContainer
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.domain.rating.Elo
@@ -28,10 +29,11 @@ data class CompareState(
 
 class CompareViewModel(
     private val photoRepository: PhotoRepository,
-    private val comparisonRepository: ComparisonRepository
+    private val comparisonRepository: ComparisonRepository,
+    private val appContainer: AppContainer
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(CompareState())
+    private val _state = MutableStateFlow(CompareState(category = appContainer.sharedCategory.value))
     val state: StateFlow<CompareState> = _state.asStateFlow()
 
     init {
@@ -40,6 +42,7 @@ class CompareViewModel(
     }
 
     fun setCategory(category: Category) {
+        appContainer.setSharedCategory(category)
         _state.value = _state.value.copy(category = category)
         loadPair()
     }
@@ -111,7 +114,7 @@ class CompareViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val container = (application as SkinTrackerApp).container
-            return CompareViewModel(container.photoRepository, container.comparisonRepository) as T
+            return CompareViewModel(container.photoRepository, container.comparisonRepository, container) as T
         }
     }
 }
