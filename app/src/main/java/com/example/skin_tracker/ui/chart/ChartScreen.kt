@@ -183,7 +183,7 @@ fun ChartScreen(
 
                         override fun onNothingSelected() {}
                     })
-                    updateChart(chart, photos)
+                    updateChart(chart, photos, timeRange)
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -209,7 +209,7 @@ fun ChartScreen(
     }
 }
 
-private fun updateChart(chart: LineChart, photos: List<Photo>) {
+private fun updateChart(chart: LineChart, photos: List<Photo>, timeRange: TimeRange) {
     if (photos.isEmpty()) return
 
     // Per-photo entries
@@ -227,39 +227,40 @@ private fun updateChart(chart: LineChart, photos: List<Photo>) {
         highLightColor = Color.parseColor("#FFB74D")  // Orange highlight
     }
 
-    // Daily mean entries
-    val dailyMeans = photos
-        .groupBy { photo ->
-            val cal = java.util.Calendar.getInstance()
-            cal.timeInMillis = photo.capturedAt
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-            cal.set(java.util.Calendar.MINUTE, 0)
-            cal.set(java.util.Calendar.SECOND, 0)
-            cal.set(java.util.Calendar.MILLISECOND, 0)
-            cal.timeInMillis
-        }
-        .map { (dayStart, dayPhotos) ->
-            val avgRating = dayPhotos.map { it.rating }.average()
-            Entry(dayStart.toFloat(), avgRating.toFloat())
-        }
-        .sortedBy { it.x }
+    // Centered moving average — window size scales with time range
+    val window = timeRange.movingAverageWindow
+    val avgEntries = computeMovingAverage(photoEntries, window)
 
-    val meanDataSet = if (dailyMeans.size > 1) {
-        LineDataSet(dailyMeans, "Daily Avg").apply {
+    val avgDataSet = if (avgEntries.size > 1) {
+        LineDataSet(avgEntries, "Trend (${window}pt)").apply {
             color = Color.parseColor("#FFB74D")  // Orange
-            lineWidth = 2f
+            lineWidth = 2.5f
             setDrawCircles(false)
             setDrawValues(false)
-            enableDashedLine(10f, 5f, 0f)
             isHighlightEnabled = false
         }
     } else null
 
     val dataSets = mutableListOf(photoDataSet)
-    meanDataSet?.let { dataSets.add(it) }
+    avgDataSet?.let { dataSets.add(it) }
 
     chart.data = LineData(dataSets.toList())
     chart.invalidate()
+}
+
+/**
+ * Centered moving average over [window] data-points.
+ * At the edges the window shrinks so we still produce a value (no truncation).
+ */
+private fun computeMovingAverage(entries: List<Entry>, window: Int): List<Entry> {
+    if (entries.size < 2 || window < 2) return emptyList()
+    val half = window / 2
+    return entries.mapIndexed { i, entry ->
+        val from = maxOf(0, i - half)
+        val to = minOf(entries.lastIndex, i + half)
+        val avg = entries.subList(from, to + 1).map { it.y }.average().toFloat()
+        Entry(entry.x, avg)
+    }
 }
 
 @Composable

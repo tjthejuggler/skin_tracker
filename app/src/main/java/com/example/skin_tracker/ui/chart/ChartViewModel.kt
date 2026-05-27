@@ -17,13 +17,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import java.util.Calendar
 
-enum class TimeRange(val label: String, val days: Int?) {
-    ONE_WEEK("1W", 7),
-    ONE_MONTH("1M", 30),
-    THREE_MONTHS("3M", 90),
-    SIX_MONTHS("6M", 180),
-    ONE_YEAR("1Y", 365),
-    ALL("All", null)
+enum class TimeRange(val label: String, val days: Int?, val movingAverageWindow: Int) {
+    ONE_WEEK("1W", 7, 3),
+    ONE_MONTH("1M", 30, 7),
+    THREE_MONTHS("3M", 90, 14),
+    SIX_MONTHS("6M", 180, 21),
+    ONE_YEAR("1Y", 365, 30),
+    ALL("All", null, 60)
 }
 
 data class ChartState(
