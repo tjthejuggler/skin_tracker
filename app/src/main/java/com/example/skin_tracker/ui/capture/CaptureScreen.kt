@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.example.skin_tracker.ui.components.SelectableChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -259,17 +260,12 @@ private fun ConfirmationView(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Category.entries.forEach { cat ->
-                val selected = cat == category
-                FilledTonalButton(
+                SelectableChip(
+                    label = cat.label,
+                    selected = cat == category,
                     onClick = { onCategoryChange(cat) },
                     shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text(
-                        text = cat.label,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                )
             }
         }
 

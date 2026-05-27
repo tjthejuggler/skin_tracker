@@ -10,11 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -31,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
+import com.example.skin_tracker.ui.components.SelectableChip
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.Entry
@@ -58,49 +64,87 @@ fun ChartScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Category tabs
+        // Category tabs (Face / Body)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
             Category.entries.forEach { cat ->
-                val selected = cat == state.category
-                FilledTonalButton(
+                SelectableChip(
+                    label = cat.label,
+                    selected = cat == state.category,
                     onClick = { viewModel.setCategory(cat) },
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                ) {
-                    Text(
-                        text = cat.label,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    shape = RoundedCornerShape(20.dp)
+                )
+                if (cat != Category.entries.last()) {
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Time range chips
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // Time range chips — compact, all fit on one row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            items(TimeRange.entries) { range ->
-                val selected = range == state.timeRange
-                FilledTonalButton(
+            TimeRange.entries.forEach { range ->
+                SelectableChip(
+                    label = range.label,
+                    selected = range == state.timeRange,
                     onClick = { viewModel.setTimeRange(range) },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text(
-                        text = range.label,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp, vertical = 4.dp
                     )
-                }
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Period navigation: ← label →
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            IconButton(
+                onClick = { viewModel.stepBack() },
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Previous period",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Text(
+                text = state.periodLabel,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            IconButton(
+                onClick = { viewModel.stepForward() },
+                enabled = state.periodOffset > 0,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Next period",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         if (state.photos.isEmpty()) {
             Box(
@@ -303,7 +347,7 @@ private fun PhotoBottomSheet(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        FilledTonalButton(onClick = onPhotoClick) {
+        androidx.compose.material3.FilledTonalButton(onClick = onPhotoClick) {
             Text("View Full Photo")
         }
 

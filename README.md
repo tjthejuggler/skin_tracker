@@ -8,7 +8,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **🖼️ Gallery Import** — Import existing photos from your phone's gallery (uses EXIF date)
 - **🤖 Auto Face/Body Detection** — Automatically tags photos as Face or Body using on-device face detection (Android built-in FaceDetector)
 - **⚖️ Compare Mode** — Two random photos shown side-by-side; tap the one where your skin looks better
-- **📊 Interactive Charts** — Zoomable, pannable Elo rating chart with time-range filters (1W/1M/3M/6M/1Y/All), daily average overlay, and tap-to-view photo details
+- **📊 Interactive Charts** — Zoomable, pannable Elo rating chart with time-range filters (1W/1M/3M/6M/1Y/All), period step arrows (←/→) to navigate back/forward by the selected time unit, daily average overlay, and tap-to-view photo details
 - **🏷️ Categories** — Face and Body tracked separately
 - **📈 Elo Rating** — Each photo starts at 1500; comparisons update ratings using K=32 Elo system
 - **🔍 Photo Detail** — Full-screen view with swipe between same-day photos, rating stats, and delete
@@ -69,7 +69,8 @@ com.example.skin_tracker/
 ├── ui/
 │   ├── Navigation.kt
 │   ├── SkinTrackerApp.kt          (NavHost + bottom bar + debug bubble)
-│   ├── chart/                     (ChartScreen, ChartViewModel)
+│   ├── chart/                     (ChartScreen, ChartViewModel, TimeRange)
+│   ├── components/                (SelectableChip — shared chip component)
 │   ├── compare/                   (CompareScreen, CompareViewModel)
 │   ├── capture/                   (CaptureScreen, CaptureViewModel)
 │   ├── debug/                     (DebugBubbleOverlay, DebugNoteDialog)
@@ -116,3 +117,11 @@ com.example.skin_tracker/
 - Settings screen includes Debug Mode toggle and optional SAF directory picker for JSON output
 - `DebugPreferences` persists debug mode, directory URI, saved notes, and queued notes
 - `ScreenContextMapper` maps skin_tracker routes to source file context for LLM debugging
+
+### 2026-05-27 — Chart Screen & Selection UX Improvements
+- Replaced `LazyRow` time-range chips with a compact `Row(SpaceEvenly)` layout — all 6 periods (1W/1M/3M/6M/1Y/All) now fit on screen without horizontal scrolling
+- Added period step arrows (← / →) below the time-range row: stepping back/forward navigates by the selected time unit (e.g. 1M steps by month, 1W by week)
+- Forward arrow disabled when at the current (most recent) period; period label shown between arrows
+- Created shared `SelectableChip` composable: selected chips use `primary` fill + `onPrimary` text + elevation shadow for a clear "glow" effect; unselected chips use `surfaceVariant`
+- Replaced all `FilledTonalButton` category tabs (Face/Body) on Chart, Compare, and Capture screens with `SelectableChip` for consistent, visually distinct selection state
+- `ChartViewModel` now tracks `periodOffset` (Int) and produces a human-readable `periodLabel` (e.g. "May 2026", "Apr 28 – May 4")
