@@ -25,7 +25,8 @@ data class PhotoDetailState(
 class PhotoDetailViewModel(
     private val photoRepository: PhotoRepository,
     private val comparisonRepository: ComparisonRepository,
-    private val photoFileStore: PhotoFileStore
+    private val photoFileStore: PhotoFileStore,
+    private val requestAutoBackup: () -> Unit
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PhotoDetailState())
@@ -54,6 +55,7 @@ class PhotoDetailViewModel(
             photoFileStore.delete(photo.uri)
             // Hard delete the photo record
             photoRepository.hardDelete(photo.id)
+            requestAutoBackup()
             _state.value = _state.value.copy(isDeleted = true)
         }
     }
@@ -62,6 +64,7 @@ class PhotoDetailViewModel(
         val photo = _state.value.photo ?: return
         viewModelScope.launch {
             photoRepository.updateCapturedAt(photo.id, newCapturedAt)
+            requestAutoBackup()
             loadPhoto(photo.id)
         }
     }
@@ -73,6 +76,7 @@ class PhotoDetailViewModel(
             comparisonRepository.deleteByPhotoId(photo.id)
             // Update category and reset rating stats
             photoRepository.updateCategoryAndResetStats(photo.id, newCategory)
+            requestAutoBackup()
             // Reload to reflect changes
             loadPhoto(photo.id)
         }
@@ -89,8 +93,14 @@ class PhotoDetailViewModel(
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val container = (application as SkinTrackerApp).container
-            return PhotoDetailViewModel(container.photoRepository, container.comparisonRepository, container.photoFileStore) as T
+            val app = application as SkinTrackerApp
+            val container = app.container
+            return PhotoDetailViewModel(
+                container.photoRepository,
+                container.comparisonRepository,
+                container.photoFileStore,
+                app::requestAutoBackup
+            ) as T
         }
     }
 }

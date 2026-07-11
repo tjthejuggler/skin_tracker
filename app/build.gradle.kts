@@ -38,6 +38,13 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        jniLibs {
+            // Android 15+ 16 KB page-size compatibility: keep .so files uncompressed
+            // and page-aligned in the APK.
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {
@@ -48,6 +55,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
+    // Pin a 16 KB-aligned graphics-path (transitive dep of compose ui-graphics)
+    implementation(libs.androidx.graphics.path)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)

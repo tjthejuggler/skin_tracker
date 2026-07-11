@@ -14,6 +14,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **🔍 Photo Detail** — Full-screen view with swipe between same-day photos, rating stats, and delete
 - **🔗 Tail App Integration** — Automatically increment a habit in the Tail habits app whenever a new photo is added (captured or imported)
 - **🐛 Debug Bubble** — Floating draggable bubble overlay for logging bugs, features, and notes per-screen; saves to `debug_skin_tracker.json` for LLM-assisted debugging
+- **💾 Uninstall-Proof Backup** — Automatic incremental backup of every image plus a full metadata manifest to a user-chosen folder (via Storage Access Framework), so data survives a complete app uninstall. One-tap Restore rebuilds the database and images on a fresh install.
 
 ## Tech Stack
 
@@ -48,6 +49,15 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 2. **Compare** — The app shows you two random photos from the same category. Tap the one where your psoriasis looks better. The Elo rating updates for both photos.
 3. **Track** — The chart screen shows your Elo rating over time. Per-photo data points are connected by a line; a dashed daily-average overlay appears when a day has multiple photos.
 4. **Pair Selection** — Random within category, biased toward photos with fewer comparisons so new uploads catch up faster.
+
+## Backup & Restore
+
+*(Added 2026-07-10)* Skin Tracker keeps all images in app-private storage (`filesDir/photos/`) and metadata in the Room database, both of which are erased on uninstall. To make the data survive a full app deletion, an uninstall-proof backup system writes to a folder **outside** the app sandbox using the Storage Access Framework (SAF).
+
+- **Set it up once** — In **Settings → Backup & Restore**, choose a backup folder (ideally a cloud-synced folder such as Google Drive / Nextcloud, or an SD card). The app takes a persistable URI permission so it keeps write access across reboots.
+- **Automatic** — Backups run on every app start and are debounced after each data change (photo add, edit/crop, delete, category change, comparison). Image copies are **incremental** (only new files by filename); the small `backup.json` manifest is always rewritten in full.
+- **Layout** — `SkinTrackerBackup/backup.json` + `SkinTrackerBackup/images/*.jpg` inside the chosen folder.
+- **Restore** — After a reinstall, pick the same folder and tap **Restore**. Images are copied back into app-private storage, the URIs are re-rooted, and the Room tables are repopulated (primary keys preserved via `REPLACE` upserts).
 
 ## Project Structure
 

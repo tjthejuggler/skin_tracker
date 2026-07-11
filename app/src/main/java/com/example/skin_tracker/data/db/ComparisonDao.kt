@@ -2,6 +2,7 @@ package com.example.skin_tracker.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.skin_tracker.data.entity.ComparisonEntity
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +12,14 @@ interface ComparisonDao {
 
     @Insert
     suspend fun insert(comparison: ComparisonEntity): Long
+
+    /** Insert preserving the entity's primary key (used by restore). Replaces on conflict. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWithId(comparison: ComparisonEntity)
+
+    /** Wipe the whole comparisons table (used by restore before re-importing). */
+    @Query("DELETE FROM comparisons")
+    suspend fun clearAll()
 
     @Query("SELECT * FROM comparisons ORDER BY comparedAt DESC")
     fun getAll(): Flow<List<ComparisonEntity>>

@@ -30,6 +30,14 @@ class PhotoRepository(private val photoDao: PhotoDao) {
     suspend fun insert(photo: Photo): Long =
         photoDao.insert(photo.toEntity())
 
+    /** Restore-time insert that preserves the photo's id. */
+    suspend fun upsertWithId(photo: Photo) =
+        photoDao.upsertWithId(photo.toEntity())
+
+    /** Wipe the photos table (restore only). */
+    suspend fun clearAll() =
+        photoDao.clearAll()
+
     suspend fun updateRating(photo: Photo) {
         photoDao.updateRating(
             id = photo.id,

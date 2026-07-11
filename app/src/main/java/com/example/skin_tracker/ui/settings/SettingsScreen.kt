@@ -17,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,6 +29,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -61,15 +65,24 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.loadHabits()
+    }
+
+    // Surface backup/restore result messages as snackbars.
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
     }
 
     val context = LocalContext.current
     val debugDirLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
+        com.example.skin_tracker.MainActivity.expectingActivityResult = false
         uri?.let {
             val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -78,7 +91,20 @@ fun SettingsScreen(
         }
     }
 
+    val backupDirLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        com.example.skin_tracker.MainActivity.expectingActivityResult = false
+        uri?.let {
+            val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(it, flags)
+            viewModel.setBackupDir(uri.toString())
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
@@ -121,12 +147,32 @@ fun SettingsScreen(
                 onRefresh = { viewModel.loadHabits() }
             )
 
+            // ── Backup & Restore ─────────────────────────────────────────
+            BackupCard(
+                backupDirUri = state.backupDirUri,
+                autoBackupEnabled = state.autoBackupEnabled,
+                lastBackupAt = state.lastBackupAt,
+                lastBackupPhotoCount = state.lastBackupPhotoCount,
+                backupInProgress = state.backupInProgress,
+                restoreInProgress = state.restoreInProgress,
+                onChooseFolder = {
+                    com.example.skin_tracker.MainActivity.expectingActivityResult = true
+                    backupDirLauncher.launch(null)
+                },
+                onToggleAutoBackup = { viewModel.setAutoBackupEnabled(it) },
+                onBackupNow = { viewModel.runManualBackup() },
+                onRestore = { viewModel.runRestore() }
+            )
+
             // ── Debug Mode ───────────────────────────────────────────────
             DebugModeCard(
                 debugModeEnabled = state.debugModeEnabled,
                 debugFileDirUri = state.debugFileDirUri,
                 onToggleDebugMode = { viewModel.setDebugModeEnabled(it) },
-                onChooseDirectory = { debugDirLauncher.launch(null) },
+                onChooseDirectory = {
+                    com.example.skin_tracker.MainActivity.expectingActivityResult = true
+                    debugDirLauncher.launch(null)
+                },
                 onClearDirectory = { viewModel.clearDebugFileDir() }
             )
         }
@@ -586,5 +632,183 @@ private fun DebugModeCard(
                 }
             }
         }
+    }
+}
+
+// ── Backup & Restore card ────────────────────────────────────────────────────
+
+@Composable
+private fun BackupCard(
+    backupDirUri: String,
+    autoBackupEnabled: Boolean,
+    lastBackupAt: Long,
+    lastBackupPhotoCount: Int,
+    backupInProgress: Boolean,
+    restoreInProgress: Boolean,
+    onChooseFolder: () -> Unit,
+    onToggleAutoBackup: (Boolean) -> Unit,
+    onBackupNow: () -> Unit,
+    onRestore: () -> Unit
+) {
+    val configured = backupDirUri.isNotBlank()
+    val busy = backupInProgress || restoreInProgress
+    var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("💾 Backup & Restore", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Copies all your photos and rating data to a folder OUTSIDE the app so it survives " +
+                    "even a full uninstall. Pick a cloud-synced folder (Google Drive, Nextcloud…) or " +
+                    "an SD card for the safest results. Backups run automatically on every launch.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Folder chooser row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Backup folder", style = MaterialTheme.typography.bodyMedium)
+                    if (configured) {
+                        val displayPath = try {
+                            Uri.parse(backupDirUri).lastPathSegment ?: backupDirUri
+                        } catch (_: Exception) { backupDirUri }
+                        Text(
+                            displayPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            "Not set — choose a folder to enable backups",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = onChooseFolder,
+                    enabled = !busy,
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        if (configured) "Change" else "Choose Folder",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            if (configured) {
+                // Auto-backup toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Automatic backup", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (autoBackupEnabled) "On — backs up on every launch" else "Off — backup manually only",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (autoBackupEnabled) Color(0xFF4CAF50)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoBackupEnabled,
+                        onCheckedChange = onToggleAutoBackup,
+                        enabled = !busy,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = Color(0xFF4CAF50),
+                            checkedThumbColor = Color.White
+                        )
+                    )
+                }
+
+                // Last backup status
+                val lastBackupText = if (lastBackupAt > 0L) {
+                    val sdf = SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault())
+                    "${sdf.format(Date(lastBackupAt))} ($lastBackupPhotoCount photos)"
+                } else {
+                    "Never"
+                }
+                StatsRow("Last backup", lastBackupText)
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = onBackupNow,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (backupInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("Back up now")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { showRestoreConfirm = true },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (restoreInProgress) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Restore")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirm = false },
+            title = { Text("Restore from backup?") },
+            text = {
+                Text(
+                    "This will REPLACE all photos and rating data currently in the app with the " +
+                        "contents of the backup folder. Use this after reinstalling the app. Continue?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreConfirm = false
+                    onRestore()
+                }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel") }
+            }
+        )
     }
 }

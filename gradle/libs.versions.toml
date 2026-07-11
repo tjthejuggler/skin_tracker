@@ -8,10 +8,11 @@ junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
-composeBom = "2024.09.00"
+composeBom = "2025.06.01"
 room = "2.6.1"
 coil = "2.7.0"
-camerax = "1.3.4"
+camerax = "1.4.2"
+graphicsPath = "1.0.1"
 exifinterface = "1.3.7"
 mpandroidchart = "v3.1.0"
 navigationCompose = "2.8.4"
@@ -63,6 +64,9 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # DocumentFile (SAF)
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
+
+# Graphics Path (16 KB-aligned; pin to avoid unaligned transitive version)
+androidx-graphics-path = { group = "androidx.graphics", name = "graphics-path", version.ref = "graphicsPath" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

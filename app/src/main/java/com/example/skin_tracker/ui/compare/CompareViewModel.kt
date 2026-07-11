@@ -30,7 +30,8 @@ data class CompareState(
 class CompareViewModel(
     private val photoRepository: PhotoRepository,
     private val comparisonRepository: ComparisonRepository,
-    private val appContainer: AppContainer
+    private val appContainer: AppContainer,
+    private val requestAutoBackup: () -> Unit
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CompareState(category = appContainer.sharedCategory.value))
@@ -86,6 +87,8 @@ class CompareViewModel(
                 loserRatingAfter = updatedLoser.rating
             )
 
+            requestAutoBackup()
+
             loadComparisonCount()
             loadPair()
         }
@@ -113,8 +116,14 @@ class CompareViewModel(
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val container = (application as SkinTrackerApp).container
-            return CompareViewModel(container.photoRepository, container.comparisonRepository, container) as T
+            val app = application as SkinTrackerApp
+            val container = app.container
+            return CompareViewModel(
+                container.photoRepository,
+                container.comparisonRepository,
+                container,
+                app::requestAutoBackup
+            ) as T
         }
     }
 }

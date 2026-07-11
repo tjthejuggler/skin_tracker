@@ -16,6 +16,14 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
     suspend fun getById(id: Long): ComparisonEntity? =
         comparisonDao.getById(id)
 
+    /** Restore-time insert that preserves the comparison's id. */
+    suspend fun upsertWithId(comparison: ComparisonEntity) =
+        comparisonDao.upsertWithId(comparison)
+
+    /** Wipe the comparisons table (restore only). */
+    suspend fun clearAll() =
+        comparisonDao.clearAll()
+
     suspend fun insert(
         winnerPhotoId: Long,
         loserPhotoId: Long,

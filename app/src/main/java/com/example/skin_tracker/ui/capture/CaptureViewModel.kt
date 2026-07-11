@@ -21,7 +21,8 @@ import kotlinx.coroutines.launch
 class CaptureViewModel(
     private val photoRepository: PhotoRepository,
     private val photoFileStore: PhotoFileStore,
-    private val habitIntegrationRepository: HabitIntegrationRepository
+    private val habitIntegrationRepository: HabitIntegrationRepository,
+    private val requestAutoBackup: () -> Unit
 ) : ViewModel() {
 
     private val _category = MutableStateFlow(Category.FACE)
@@ -91,6 +92,7 @@ class CaptureViewModel(
 
                 photoRepository.insert(photo)
                 habitIntegrationRepository.sendHabitIncrement(HabitIntegrationRepository.Slot.PHOTO_ADDED)
+                requestAutoBackup()
                 _saveComplete.value = true
                 _pendingPhoto.value = null
             } finally {
@@ -115,8 +117,14 @@ class CaptureViewModel(
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val container = (application as SkinTrackerApp).container
-            return CaptureViewModel(container.photoRepository, container.photoFileStore, container.habitIntegrationRepository) as T
+            val app = application as SkinTrackerApp
+            val container = app.container
+            return CaptureViewModel(
+                container.photoRepository,
+                container.photoFileStore,
+                container.habitIntegrationRepository,
+                app::requestAutoBackup
+            ) as T
         }
     }
 }

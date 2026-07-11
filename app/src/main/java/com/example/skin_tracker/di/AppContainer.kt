@@ -1,6 +1,8 @@
 package com.example.skin_tracker.di
 
 import android.content.Context
+import com.example.skin_tracker.data.backup.BackupManager
+import com.example.skin_tracker.data.backup.BackupPreferences
 import com.example.skin_tracker.data.db.AppDatabase
 import com.example.skin_tracker.data.debug.DebugNoteRepository
 import com.example.skin_tracker.data.debug.DebugPreferences
@@ -22,6 +24,12 @@ class AppContainer(val context: Context) {
     val photoRepository by lazy { PhotoRepository(database.photoDao()) }
 
     val comparisonRepository by lazy { ComparisonRepository(database.comparisonDao()) }
+
+    val backupPreferences by lazy { BackupPreferences(context) }
+
+    val backupManager by lazy {
+        BackupManager(context, photoRepository, comparisonRepository, backupPreferences)
+    }
 
     private val habitPrefs by lazy {
         context.getSharedPreferences("habit_integration_prefs", Context.MODE_PRIVATE)

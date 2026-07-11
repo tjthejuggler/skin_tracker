@@ -2,6 +2,7 @@ package com.example.skin_tracker.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.skin_tracker.data.entity.PhotoEntity
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +12,14 @@ interface PhotoDao {
 
     @Insert
     suspend fun insert(photo: PhotoEntity): Long
+
+    /** Insert preserving the entity's primary key (used by restore). Replaces on conflict. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWithId(photo: PhotoEntity)
+
+    /** Wipe the whole photos table (used by restore before re-importing). */
+    @Query("DELETE FROM photos")
+    suspend fun clearAll()
 
     @Query("SELECT * FROM photos WHERE deleted = 0 ORDER BY capturedAt DESC")
     fun getAll(): Flow<List<PhotoEntity>>

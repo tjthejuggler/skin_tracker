@@ -21,7 +21,8 @@ data class EditPhotoState(
 
 class EditPhotoViewModel(
     private val photoRepository: PhotoRepository,
-    private val photoFileStore: PhotoFileStore
+    private val photoFileStore: PhotoFileStore,
+    private val requestAutoBackup: () -> Unit
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditPhotoState())
@@ -45,6 +46,7 @@ class EditPhotoViewModel(
         _state.value = _state.value.copy(isLoading = true)
         viewModelScope.launch {
             photoFileStore.crop(photo.uri, cropLeft, cropTop, cropRight, cropBottom, rotationDegrees)
+            requestAutoBackup()
             _state.value = _state.value.copy(isLoading = false, isDone = true)
         }
     }
@@ -52,8 +54,13 @@ class EditPhotoViewModel(
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val container = (application as SkinTrackerApp).container
-            return EditPhotoViewModel(container.photoRepository, container.photoFileStore) as T
+            val app = application as SkinTrackerApp
+            val container = app.container
+            return EditPhotoViewModel(
+                container.photoRepository,
+                container.photoFileStore,
+                app::requestAutoBackup
+            ) as T
         }
     }
 }

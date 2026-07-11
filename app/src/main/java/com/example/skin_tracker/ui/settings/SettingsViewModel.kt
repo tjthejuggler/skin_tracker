@@ -5,14 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
+import com.example.skin_tracker.data.backup.BackupManager
+import com.example.skin_tracker.data.backup.BackupPreferences
 import com.example.skin_tracker.data.debug.DebugPreferences
 import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
 import com.example.skin_tracker.data.repo.ComparisonRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -60,19 +65,34 @@ data class SettingsUiState(
     // ── Debug Mode ────────────────────────────────────────────────────────
     val debugModeEnabled: Boolean = false,
     val debugFileDirUri: String = "",
+    // ── Backup ────────────────────────────────────────────────────────────
+    val backupDirUri: String = "",
+    val autoBackupEnabled: Boolean = true,
+    val lastBackupAt: Long = 0L,
+    val lastBackupPhotoCount: Int = 0,
+    val backupInProgress: Boolean = false,
+    val restoreInProgress: Boolean = false,
     // ── Stats ─────────────────────────────────────────────────────────────
     val stats: AppStats = AppStats()
-)
+) {
+    val backupConfigured: Boolean get() = backupDirUri.isNotBlank()
+}
 
 class SettingsViewModel(
     private val habitRepo: HabitIntegrationRepository,
     private val debugPrefs: DebugPreferences,
     private val photoRepository: PhotoRepository,
-    private val comparisonRepository: ComparisonRepository
+    private val comparisonRepository: ComparisonRepository,
+    private val backupPrefs: BackupPreferences,
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(buildInitialState())
     val uiState: StateFlow<SettingsUiState> = _uiState
+
+    /** One-off user-facing messages (backup/restore results) surfaced as snackbars/toasts. */
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     init {
         // Observe debug prefs snapshot so UI reacts to changes
@@ -81,6 +101,17 @@ class SettingsViewModel(
                 _uiState.value = _uiState.value.copy(
                     debugModeEnabled = snap.debugModeEnabled,
                     debugFileDirUri = snap.debugFileDirUri
+                )
+            }
+        }
+        // Observe backup prefs snapshot so UI reacts to folder/toggle/last-backup changes
+        viewModelScope.launch {
+            backupPrefs.snapshot.collect { snap ->
+                _uiState.value = _uiState.value.copy(
+                    backupDirUri = snap.backupDirUri,
+                    autoBackupEnabled = snap.autoBackupEnabled,
+                    lastBackupAt = snap.lastBackupAt,
+                    lastBackupPhotoCount = snap.lastBackupPhotoCount
                 )
             }
         }
@@ -122,6 +153,50 @@ class SettingsViewModel(
 
     fun clearDebugFileDir() {
         debugPrefs.debugFileDirUri = ""
+    }
+
+    // ── Backup & Restore ───────────────────────────────────────────────────
+
+    /** Persist the SAF folder the user picked and immediately run a first full backup. */
+    fun setBackupDir(uriString: String) {
+        backupPrefs.backupDirUri = uriString
+        runManualBackup()
+    }
+
+    fun setAutoBackupEnabled(enabled: Boolean) {
+        backupPrefs.autoBackupEnabled = enabled
+    }
+
+    /** Force a backup now, ignoring the auto-backup toggle. */
+    fun runManualBackup() {
+        if (_uiState.value.backupInProgress) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(backupInProgress = true)
+            val msg = when (val r = backupManager.backup(force = true)) {
+                is BackupManager.Result.Success ->
+                    "Backup complete: ${r.photoCount} photos (${r.imagesCopied} new images copied)"
+                is BackupManager.Result.Skipped -> "Backup skipped: ${r.reason}"
+                is BackupManager.Result.Failure -> "Backup failed: ${r.message}"
+            }
+            _uiState.value = _uiState.value.copy(backupInProgress = false)
+            _messages.emit(msg)
+        }
+    }
+
+    /** Restore from the configured backup folder. Replaces all current photos and comparisons. */
+    fun runRestore() {
+        if (_uiState.value.restoreInProgress) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(restoreInProgress = true)
+            val msg = when (val r = backupManager.restore()) {
+                is BackupManager.RestoreResult.Success ->
+                    "Restore complete: ${r.photoCount} photos, ${r.imagesRestored} images, ${r.comparisonCount} comparisons"
+                is BackupManager.RestoreResult.Failure -> "Restore failed: ${r.message}"
+            }
+            _uiState.value = _uiState.value.copy(restoreInProgress = false)
+            _messages.emit(msg)
+            loadStats()
+        }
     }
 
     // ── Stats ──────────────────────────────────────────────────────────────
@@ -233,7 +308,11 @@ class SettingsViewModel(
                 habitName = habitRepo.getHabitName(slot)
             ),
             debugModeEnabled = debugPrefs.debugModeEnabled,
-            debugFileDirUri = debugPrefs.debugFileDirUri
+            debugFileDirUri = debugPrefs.debugFileDirUri,
+            backupDirUri = backupPrefs.backupDirUri,
+            autoBackupEnabled = backupPrefs.autoBackupEnabled,
+            lastBackupAt = backupPrefs.lastBackupAt,
+            lastBackupPhotoCount = backupPrefs.lastBackupPhotoCount
         )
     }
 
@@ -245,7 +324,9 @@ class SettingsViewModel(
                 container.habitIntegrationRepository,
                 container.debugPreferences,
                 container.photoRepository,
-                container.comparisonRepository
+                container.comparisonRepository,
+                container.backupPreferences,
+                container.backupManager
             ) as T
         }
     }
