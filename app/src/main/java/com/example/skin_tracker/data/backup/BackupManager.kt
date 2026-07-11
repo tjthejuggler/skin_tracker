@@ -16,7 +16,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 private const val TAG = "BackupManager"
 
@@ -38,13 +42,11 @@ private const val TAG = "BackupManager"
  * ```
  * SkinTrackerBackup
  *   backup.json          full metadata manifest (photos + comparisons)
- *   images
- *     1699999999999.jpg  copy of every image, keyed by original filename
+ *   images.zip           compressed archive containing all images
  * ```
  *
- * ## Incremental
- * [backup] copies only images that are not already present in the backup folder (matched by
- * filename), so it is cheap enough to run automatically after every data change and on app start.
+ * ## Backup behavior
+ * [backup] creates a new zip file containing all images each time (replacing any existing zip).
  * The `backup.json` manifest is always rewritten in full (it is tiny).
  *
  * ## Restore
@@ -91,23 +93,38 @@ class BackupManager(
                 val root = resolveBackupRoot(dirUriString)
                     ?: return@withLock Result.Failure("Cannot access backup folder (permission lost?)")
 
-                val imagesDir = root.findFile(IMAGES_DIR)?.takeIf { it.isDirectory }
-                    ?: root.createDirectory(IMAGES_DIR)
-                    ?: return@withLock Result.Failure("Cannot create images folder")
-
                 val photos = photoRepository.getAllSync()
                 val comparisons = comparisonRepository.getAllSync()
 
-                // Incremental image copy: only push files not already in the backup.
-                val existingNames = imagesDir.listFiles().mapNotNull { it.name }.toHashSet()
-                var copied = 0
-                for (photo in photos) {
-                    val srcFile = File(photo.uri)
-                    if (!srcFile.exists()) continue
-                    val name = srcFile.name
-                    if (name in existingNames) continue
-                    if (copyFileToDir(srcFile, imagesDir, name)) copied++
+                // Create a zip file containing all images
+                val zipFile = root.findFile(IMAGES_ZIP)?.takeIf { it.isFile }
+                if (zipFile != null) {
+                    zipFile.delete()
                 }
+                val newZipFile = root.createFile("application/zip", IMAGES_ZIP)
+                    ?: return@withLock Result.Failure("Cannot create images zip file")
+
+                var imagesAdded = 0
+                context.contentResolver.openOutputStream(newZipFile.uri)?.use { outputStream ->
+                    ZipOutputStream(outputStream).use { zipOut ->
+                        for (photo in photos) {
+                            val srcFile = File(photo.uri)
+                            if (!srcFile.exists()) continue
+                            val entryName = srcFile.name
+                            try {
+                                FileInputStream(srcFile).use { fis ->
+                                    val entry = ZipEntry(entryName)
+                                    zipOut.putNextEntry(entry)
+                                    fis.copyTo(zipOut)
+                                    zipOut.closeEntry()
+                                    imagesAdded++
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to add ${srcFile.name} to zip", e)
+                            }
+                        }
+                    }
+                } ?: return@withLock Result.Failure("Cannot write to zip file")
 
                 // Always rewrite the (small) manifest.
                 val manifest = buildManifest(photos, comparisons)
@@ -116,8 +133,8 @@ class BackupManager(
                 backupPrefs.lastBackupAt = System.currentTimeMillis()
                 backupPrefs.lastBackupPhotoCount = photos.size
 
-                Log.i(TAG, "Backup complete: ${photos.size} photos, $copied new images copied")
-                Result.Success(photoCount = photos.size, imagesCopied = copied)
+                Log.i(TAG, "Backup complete: ${photos.size} photos, $imagesAdded images in zip")
+                Result.Success(photoCount = photos.size, imagesCopied = imagesAdded)
             } catch (e: Exception) {
                 Log.e(TAG, "Backup failed", e)
                 Result.Failure(e.message ?: "Unknown error")
@@ -148,30 +165,57 @@ class BackupManager(
 
                 val (photos, comparisons) = parseManifest(json)
 
-                val imagesDir = root.findFile(IMAGES_DIR)?.takeIf { it.isDirectory }
-                val backupImages: Map<String, DocumentFile> =
-                    imagesDir?.listFiles()?.mapNotNull { df -> df.name?.let { it to df } }?.toMap()
-                        ?: emptyMap()
+                val zipFile = root.findFile(IMAGES_ZIP)?.takeIf { it.isFile }
+                    ?: return@withLock RestoreResult.Failure("No images.zip found in folder")
 
-                // Copy images back into app-private storage and remap the uri to the local file.
+                // Extract images from zip file and copy them back into app-private storage.
                 var restoredImages = 0
+                val restoredFiles = mutableMapOf<String, File>()
+                context.contentResolver.openInputStream(zipFile.uri)?.use { inputStream ->
+                    ZipInputStream(inputStream).use { zipIn ->
+                        var entry = zipIn.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory) {
+                                val destFile = File(photosDir, entry.name)
+                                try {
+                                    FileOutputStream(destFile).use { fos ->
+                                        zipIn.copyTo(fos)
+                                    }
+                                    restoredFiles[entry.name] = destFile
+                                    restoredImages++
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to extract ${entry.name}", e)
+                                }
+                            }
+                            zipIn.closeEntry()
+                            entry = zipIn.nextEntry
+                        }
+                    }
+                } ?: return@withLock RestoreResult.Failure("Cannot read zip file")
+
+                // Remap the photo URIs to the local files.
                 val remapped = photos.map { photo ->
                     val fileName = File(photo.uri).name
-                    val src = backupImages[fileName]
-                    val destFile = File(photosDir, fileName)
-                    if (src != null) {
-                        if (copyDocToFile(src, destFile)) restoredImages++
+                    val localFile = restoredFiles[fileName]
+                    if (localFile != null) {
+                        photo.copy(uri = localFile.absolutePath)
+                    } else {
+                        Log.w(TAG, "Image not found in zip: $fileName")
+                        photo.copy(uri = "") // Mark as missing
                     }
-                    photo.copy(uri = destFile.absolutePath)
                 }
 
                 // Rewrite the database.
                 comparisonRepository.clearAll()
                 photoRepository.clearAll()
-                for (photo in remapped) photoRepository.upsertWithId(photo)
+                for (photo in remapped) {
+                    if (photo.uri.isNotEmpty()) {
+                        photoRepository.upsertWithId(photo)
+                    }
+                }
                 for (comparison in comparisons) comparisonRepository.upsertWithId(comparison)
 
-                Log.i(TAG, "Restore complete: ${remapped.size} photos, $restoredImages images, ${comparisons.size} comparisons")
+                Log.i(TAG, "Restore complete: ${remapped.size} photos, $restoredImages images restored, ${comparisons.size} comparisons")
                 RestoreResult.Success(
                     photoCount = remapped.size,
                     imagesRestored = restoredImages,
@@ -194,32 +238,6 @@ class BackupManager(
         return existing ?: tree.createDirectory(BACKUP_DIR)
     }
 
-    private fun copyFileToDir(src: File, dir: DocumentFile, name: String): Boolean {
-        return try {
-            // Remove any stale entry with the same name first.
-            dir.findFile(name)?.delete()
-            val dest = dir.createFile("image/jpeg", name) ?: return false
-            context.contentResolver.openOutputStream(dest.uri)?.use { out ->
-                src.inputStream().use { it.copyTo(out) }
-            } ?: return false
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy ${src.name} to backup", e)
-            false
-        }
-    }
-
-    private fun copyDocToFile(src: DocumentFile, dest: File): Boolean {
-        return try {
-            context.contentResolver.openInputStream(src.uri)?.use { input ->
-                FileOutputStream(dest).use { output -> input.copyTo(output) }
-            } ?: return false
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to restore image ${src.name}", e)
-            false
-        }
-    }
 
     private fun writeManifest(root: DocumentFile, json: String) {
         root.findFile(MANIFEST_NAME)?.delete()
@@ -320,7 +338,7 @@ class BackupManager(
 
     companion object {
         private const val BACKUP_DIR = "SkinTrackerBackup"
-        private const val IMAGES_DIR = "images"
+        private const val IMAGES_ZIP = "images.zip"
         private const val MANIFEST_NAME = "backup.json"
         private const val MANIFEST_VERSION = 1
     }
