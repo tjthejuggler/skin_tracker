@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import java.io.File
 @Composable
 fun CompareScreen(
     onHistoryClick: () -> Unit = {},
+    onEditPhoto: (Long) -> Unit = {},
     viewModel: CompareViewModel = viewModel(factory = CompareViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -115,6 +117,7 @@ fun CompareScreen(
                     photo = state.photoA!!,
                     label = "A",
                     onTap = { viewModel.pickWinner(winnerIsA = true) },
+                    onEditClick = { onEditPhoto(state.photoA!!.id) },
                     modifier = Modifier.weight(1f)
                 )
 
@@ -122,6 +125,7 @@ fun CompareScreen(
                     photo = state.photoB!!,
                     label = "B",
                     onTap = { viewModel.pickWinner(winnerIsA = false) },
+                    onEditClick = { onEditPhoto(state.photoB!!.id) },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -154,6 +158,7 @@ private fun ComparePhotoCard(
     photo: Photo,
     label: String,
     onTap: () -> Unit,
+    onEditClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
@@ -166,5 +171,19 @@ private fun ComparePhotoCard(
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )
+        
+        // Edit button in top-right corner
+        IconButton(
+            onClick = onEditClick,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+        ) {
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = "Edit photo",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }

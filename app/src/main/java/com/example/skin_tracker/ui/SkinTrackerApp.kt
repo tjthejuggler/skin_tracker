@@ -150,6 +150,9 @@ fun SkinTrackerApp() {
                     CompareScreen(
                         onHistoryClick = {
                             navController.navigate(Screen.History.route)
+                        },
+                        onEditPhoto = { photoId ->
+                            navController.navigate(Screen.EditPhoto.createRoute(photoId))
                         }
                     )
                 }
