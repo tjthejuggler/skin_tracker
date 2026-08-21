@@ -87,6 +87,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // ML Kit Face Detection (landmark-based face normalization for animation)
+    implementation(libs.mlkit.face.detection)
+
     // DocumentFile (SAF directory picker for debug notes)
     implementation(libs.androidx.documentfile)
 

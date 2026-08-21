@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,8 +26,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,97 +59,141 @@ import java.util.Locale
 @Composable
 fun ChartScreen(
     onPhotoClick: (Long) -> Unit,
+    playTrigger: Int = 0,
     viewModel: ChartViewModel = viewModel(factory = ChartViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
     val sheetState = rememberModalBottomSheetState()
+    var chartRef by remember { mutableStateOf<LineChart?>(null) }
+
+    val animationActive = state.animationPlaying || state.animationPreparing
+
+    // ── React to play button taps from the TopAppBar ─────────────────────
+    LaunchedEffect(playTrigger) {
+        if (playTrigger > 0) viewModel.startAnimation()
+    }
+
+    // ── Highlight the chart node for the current animation frame ──────────
+    // Uses notifyListener = false so it doesn't trigger the bottom sheet.
+    LaunchedEffect(state.animationIndex, state.animationFrames, animationActive) {
+        val chart = chartRef ?: return@LaunchedEffect
+        if (!animationActive) {
+            chart.highlightValue(null, false)
+            return@LaunchedEffect
+        }
+        val frame = state.animationFrames.getOrNull(state.animationIndex)
+        if (frame != null) {
+            chart.highlightValue(
+                frame.photo.capturedAt.toFloat(),
+                frame.photo.rating.toFloat(),
+                0,
+                false
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Category tabs (Face / Body)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Category.entries.forEach { cat ->
-                SelectableChip(
-                    label = cat.label,
-                    selected = cat == state.category,
-                    onClick = { viewModel.setCategory(cat) },
-                    shape = RoundedCornerShape(20.dp)
-                )
-                if (cat != Category.entries.last()) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Time range chips — compact, all fit on one row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            TimeRange.entries.forEach { range ->
-                SelectableChip(
-                    label = range.label,
-                    selected = range == state.timeRange,
-                    onClick = { viewModel.setTimeRange(range) },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 10.dp, vertical = 4.dp
-                    )
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Period navigation: ← label →
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            IconButton(
-                onClick = { viewModel.stepBack() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Previous period",
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Text(
-                text = state.periodLabel,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (animationActive) {
+            // ── Animation mode: show player, hide chart controls ───────────
+            FaceAnimationPlayer(
+                frames = state.animationFrames,
+                currentIndex = state.animationIndex,
+                isPlaying = state.animationPlaying,
+                isPreparing = state.animationPreparing,
+                onPlay = { viewModel.resumeAnimation() },
+                onPause = { viewModel.pauseAnimation() },
+                onStop = { viewModel.stopAnimation() }
             )
 
-            IconButton(
-                onClick = { viewModel.stepForward() },
-                enabled = state.periodOffset > 0,
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+        } else {
+            // ── Normal mode: category tabs + play button ───────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Next period",
-                    modifier = Modifier.size(20.dp)
-                )
+                Category.entries.forEach { cat ->
+                    SelectableChip(
+                        label = cat.label,
+                        selected = cat == state.category,
+                        onClick = { viewModel.setCategory(cat) },
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    if (cat != Category.entries.last()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Time range chips — compact, all fit on one row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                TimeRange.entries.forEach { range ->
+                    SelectableChip(
+                        label = range.label,
+                        selected = range == state.timeRange,
+                        onClick = { viewModel.setTimeRange(range) },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 10.dp, vertical = 4.dp
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Period navigation: ← label →
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                IconButton(
+                    onClick = { viewModel.stepBack() },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Previous period",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Text(
+                    text = state.periodLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                IconButton(
+                    onClick = { viewModel.stepForward() },
+                    enabled = state.periodOffset > 0,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Next period",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+        }
 
         if (state.photos.isEmpty()) {
             Box(
@@ -201,6 +250,8 @@ fun ChartScreen(
                     }
                 },
                 update = { chart ->
+                    chartRef = chart
+
                     // Update x-axis formatter based on current time range
                     val xPattern = when (timeRange) {
                         TimeRange.ONE_WEEK, TimeRange.ONE_MONTH -> "d"

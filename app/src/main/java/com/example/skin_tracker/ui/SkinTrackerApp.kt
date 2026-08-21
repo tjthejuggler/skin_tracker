@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.skin_tracker.SkinTrackerApp
+import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.ui.capture.CaptureScreen
 import com.example.skin_tracker.ui.chart.ChartScreen
 import com.example.skin_tracker.ui.compare.CompareScreen
@@ -94,12 +98,26 @@ fun SkinTrackerApp() {
         currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
     }
 
+    // Play button trigger — incremented each time the user taps play in the TopAppBar.
+    // ChartScreen observes this via LaunchedEffect.
+    var playTrigger by remember { mutableIntStateOf(0) }
+    val sharedCategory by container.sharedCategory.collectAsState()
+    val showPlayButton = currentRoute == Screen.Chart.route && sharedCategory == Category.FACE
+
     Box {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text("Skin Tracker") },
                     actions = {
+                        if (showPlayButton) {
+                            IconButton(onClick = { playTrigger++ }) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play face animation"
+                                )
+                            }
+                        }
                         IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
@@ -143,7 +161,8 @@ fun SkinTrackerApp() {
                     ChartScreen(
                         onPhotoClick = { photoId ->
                             navController.navigate(Screen.PhotoDetail.createRoute(photoId))
-                        }
+                        },
+                        playTrigger = playTrigger
                     )
                 }
                 composable(Screen.Compare.route) {

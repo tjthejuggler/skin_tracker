@@ -91,7 +91,7 @@ class CaptureViewModel(
                 )
 
                 photoRepository.insert(photo)
-                habitIntegrationRepository.sendHabitIncrement(HabitIntegrationRepository.Slot.PHOTO_ADDED)
+                habitIntegrationRepository.notifyPhotoAdded()
                 requestAutoBackup()
                 _saveComplete.value = true
                 _pendingPhoto.value = null

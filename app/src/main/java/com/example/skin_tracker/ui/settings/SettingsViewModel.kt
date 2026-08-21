@@ -62,6 +62,9 @@ data class SettingsUiState(
     val isLoadingHabits: Boolean = false,
     val habitAppUnavailable: Boolean = false,
     val photoAddedHabit: HabitSlotSelection = HabitSlotSelection(),
+    val faceScoreHabit: HabitSlotSelection = HabitSlotSelection(),
+    val bodyScoreHabit: HabitSlotSelection = HabitSlotSelection(),
+    val scoreSyncInProgress: Boolean = false,
     // ── Debug Mode ────────────────────────────────────────────────────────
     val debugModeEnabled: Boolean = false,
     val debugFileDirUri: String = "",
@@ -133,12 +136,41 @@ class SettingsViewModel(
     fun selectHabit(slot: HabitIntegrationRepository.Slot, entry: com.example.skin_tracker.domain.model.HabitEntry) {
         habitRepo.setHabit(slot, entry)
         val selection = HabitSlotSelection(entry.habitId, entry.habitName)
-        _uiState.value = _uiState.value.copy(photoAddedHabit = selection)
+        _uiState.value = when (slot) {
+            HabitIntegrationRepository.Slot.PHOTO_ADDED -> _uiState.value.copy(photoAddedHabit = selection)
+            HabitIntegrationRepository.Slot.FACE_SCORE  -> _uiState.value.copy(faceScoreHabit = selection)
+            HabitIntegrationRepository.Slot.BODY_SCORE  -> _uiState.value.copy(bodyScoreHabit = selection)
+        }
     }
 
     fun clearHabit(slot: HabitIntegrationRepository.Slot) {
         habitRepo.clearHabit(slot)
-        _uiState.value = _uiState.value.copy(photoAddedHabit = HabitSlotSelection())
+        _uiState.value = when (slot) {
+            HabitIntegrationRepository.Slot.PHOTO_ADDED -> _uiState.value.copy(photoAddedHabit = HabitSlotSelection())
+            HabitIntegrationRepository.Slot.FACE_SCORE  -> _uiState.value.copy(faceScoreHabit = HabitSlotSelection())
+            HabitIntegrationRepository.Slot.BODY_SCORE  -> _uiState.value.copy(bodyScoreHabit = HabitSlotSelection())
+        }
+    }
+
+    /**
+     * Force-push the full score history to Tail now (bypasses the daily
+     * throttle). Surfaces the outcome as a snackbar message.
+     */
+    fun sendScoresNow() {
+        if (_uiState.value.scoreSyncInProgress) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(scoreSyncInProgress = true)
+            val result = habitRepo.syncScoreHistory(force = true)
+            _uiState.value = _uiState.value.copy(scoreSyncInProgress = false)
+            val msg = when {
+                result.slotsSynced.isEmpty() ->
+                    "No score habits configured — pick a habit for Face or Body Skin Score first."
+                result.datesSent > 0 ->
+                    "Scores sent to Tail: ${result.datesSent} day${if (result.datesSent != 1) "s" else ""} updated."
+                else -> "Scores already up to date — nothing to send."
+            }
+            _messages.emit(msg)
+        }
     }
 
     // ── Debug Mode ─────────────────────────────────────────────────────────
@@ -301,12 +333,14 @@ class SettingsViewModel(
         TimeUnit.MILLISECONDS.toDays(millis)
 
     private fun buildInitialState(): SettingsUiState {
-        val slot = HabitIntegrationRepository.Slot.PHOTO_ADDED
+        fun selection(slot: HabitIntegrationRepository.Slot) = HabitSlotSelection(
+            habitId = habitRepo.getHabitId(slot),
+            habitName = habitRepo.getHabitName(slot)
+        )
         return SettingsUiState(
-            photoAddedHabit = HabitSlotSelection(
-                habitId = habitRepo.getHabitId(slot),
-                habitName = habitRepo.getHabitName(slot)
-            ),
+            photoAddedHabit = selection(HabitIntegrationRepository.Slot.PHOTO_ADDED),
+            faceScoreHabit = selection(HabitIntegrationRepository.Slot.FACE_SCORE),
+            bodyScoreHabit = selection(HabitIntegrationRepository.Slot.BODY_SCORE),
             debugModeEnabled = debugPrefs.debugModeEnabled,
             debugFileDirUri = debugPrefs.debugFileDirUri,
             backupDirUri = backupPrefs.backupDirUri,

@@ -1,6 +1,7 @@
 package com.example.skin_tracker.ui.chart
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,13 +10,22 @@ import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.di.AppContainer
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
+import com.example.skin_tracker.util.FaceNormalizer
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 enum class TimeRange(val label: String, val days: Int?, val movingAverageWindow: Int) {
     ONE_WEEK("1W", 7, 3),
@@ -26,6 +36,21 @@ enum class TimeRange(val label: String, val days: Int?, val movingAverageWindow:
     ALL("All", null, 60)
 }
 
+/** A single frame in the face animation. */
+data class FaceAnimationFrame(
+    val photo: Photo,
+    val bitmap: Bitmap?,
+    val dateLabel: String
+)
+
+/** Internal mutable animation state. */
+private data class AnimationState(
+    val isPreparing: Boolean = false,
+    val isPlaying: Boolean = false,
+    val currentIndex: Int = 0,
+    val frames: List<FaceAnimationFrame> = emptyList()
+)
+
 data class ChartState(
     val category: Category = Category.FACE,
     val timeRange: TimeRange = TimeRange.ONE_MONTH,
@@ -33,7 +58,12 @@ data class ChartState(
     val photos: List<Photo> = emptyList(),
     val selectedPhoto: Photo? = null,
     val showBottomSheet: Boolean = false,
-    val periodLabel: String = ""
+    val periodLabel: String = "",
+    // ── Animation ────────────────────────────────────────────────────────
+    val animationPreparing: Boolean = false,
+    val animationPlaying: Boolean = false,
+    val animationIndex: Int = 0,
+    val animationFrames: List<FaceAnimationFrame> = emptyList()
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -46,6 +76,8 @@ class ChartViewModel(
     private val _periodOffset = MutableStateFlow(0)
     private val _selectedPhoto = MutableStateFlow<Photo?>(null)
     private val _showBottomSheet = MutableStateFlow(false)
+
+    private val _animationState = MutableStateFlow(AnimationState())
 
     private data class ChartData(
         val photos: List<Photo>,
@@ -66,11 +98,145 @@ class ChartViewModel(
             ChartData(photos, category, timeRange, offset)
         },
         _selectedPhoto,
-        _showBottomSheet
-    ) { data, selectedPhoto, showBottomSheet ->
+        _showBottomSheet,
+        _animationState
+    ) { data, selectedPhoto, showBottomSheet, anim ->
         val (filtered, label) = filterByTimeRange(data.photos, data.timeRange, data.periodOffset)
-        ChartState(data.category, data.timeRange, data.periodOffset, filtered, selectedPhoto, showBottomSheet, label)
+        ChartState(
+            category = data.category,
+            timeRange = data.timeRange,
+            periodOffset = data.periodOffset,
+            photos = filtered,
+            selectedPhoto = selectedPhoto,
+            showBottomSheet = showBottomSheet,
+            periodLabel = label,
+            animationPreparing = anim.isPreparing,
+            animationPlaying = anim.isPlaying,
+            animationIndex = anim.currentIndex,
+            animationFrames = anim.frames
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChartState())
+
+    // ── Animation control ────────────────────────────────────────────────
+
+    companion object {
+        /** Milliseconds each face is shown before advancing. */
+        private const val FRAME_DURATION_MS = 400L
+    }
+
+    private var animationJob: Job? = null
+    private var timerJob: Job? = null
+
+    /** True when the animation can be started (FACE category + has photos). */
+    val canAnimate: Boolean
+        get() = state.value.category == Category.FACE && state.value.photos.isNotEmpty()
+
+    /**
+     * Prepares and starts the face animation. Loads all current face photos,
+     * normalises each one via [FaceNormalizer], then plays them in sequence.
+     */
+    fun startAnimation() {
+        if (_animationState.value.isPreparing || _animationState.value.isPlaying) return
+
+        val photos = state.value.photos
+        if (photos.isEmpty()) return
+
+        animationJob?.cancel()
+        animationJob = viewModelScope.launch {
+            val cache = appContainer.faceBitmapCache
+
+            // Only show the loading spinner if some photos need normalisation
+            val allCached = photos.all { cache.get(it.uri) != null }
+            if (!allCached) {
+                _animationState.value = AnimationState(isPreparing = true)
+            }
+
+            val dateFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+            val frames = mutableListOf<FaceAnimationFrame>()
+
+            for (photo in photos) {
+                // Check cache first — skip re-normalisation on subsequent plays
+                var bitmap = cache.get(photo.uri)
+                if (bitmap == null) {
+                    bitmap = try {
+                        FaceNormalizer.normalizeFromFile(photo.uri)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (bitmap != null) {
+                        cache.put(photo.uri, bitmap)
+                    }
+                }
+                frames.add(
+                    FaceAnimationFrame(
+                        photo = photo,
+                        bitmap = bitmap,
+                        dateLabel = dateFmt.format(Date(photo.capturedAt))
+                    )
+                )
+            }
+
+            if (frames.isEmpty()) {
+                _animationState.value = AnimationState()
+                return@launch
+            }
+
+            _animationState.value = AnimationState(
+                isPreparing = false,
+                isPlaying = true,
+                currentIndex = 0,
+                frames = frames
+            )
+            startTimer()
+        }
+    }
+
+    /** Pauses the animation at the current frame. */
+    fun pauseAnimation() {
+        timerJob?.cancel()
+        timerJob = null
+        _animationState.value = _animationState.value.copy(isPlaying = false)
+    }
+
+    /** Resumes the animation from the current frame. */
+    fun resumeAnimation() {
+        val s = _animationState.value
+        if (s.frames.isEmpty()) return
+        if (s.currentIndex >= s.frames.lastIndex) {
+            // Restart from beginning if at end
+            _animationState.value = s.copy(currentIndex = 0, isPlaying = true)
+        } else {
+            _animationState.value = s.copy(isPlaying = true)
+        }
+        startTimer()
+    }
+
+    /** Stops the animation entirely. Bitmaps remain in the LruCache for next time. */
+    fun stopAnimation() {
+        timerJob?.cancel()
+        timerJob = null
+        animationJob?.cancel()
+        animationJob = null
+        _animationState.value = AnimationState()
+    }
+
+    private fun startTimer() {
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(FRAME_DURATION_MS)
+                val s = _animationState.value
+                if (s.currentIndex >= s.frames.lastIndex) {
+                    // Reached the end — stop
+                    _animationState.value = s.copy(isPlaying = false)
+                    break
+                }
+                _animationState.value = s.copy(currentIndex = s.currentIndex + 1)
+            }
+        }
+    }
+
+    // ── Chart controls (unchanged) ───────────────────────────────────────
 
     private fun filterByTimeRange(
         photos: List<Photo>,
@@ -164,6 +330,13 @@ class ChartViewModel(
     fun dismissBottomSheet() {
         _showBottomSheet.value = false
         _selectedPhoto.value = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        timerJob?.cancel()
+        animationJob?.cancel()
+        // Bitmaps are owned by the AppContainer LruCache — do not recycle here.
     }
 
     class Factory(private val application: Application) : ViewModelProvider.Factory {

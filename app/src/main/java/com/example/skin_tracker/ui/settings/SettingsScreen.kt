@@ -138,12 +138,12 @@ fun SettingsScreen(
                 isLoading = state.isLoadingHabits,
                 habitAppUnavailable = state.habitAppUnavailable,
                 photoAddedHabit = state.photoAddedHabit,
-                onSelectHabit = { entry ->
-                    viewModel.selectHabit(HabitIntegrationRepository.Slot.PHOTO_ADDED, entry)
-                },
-                onClearHabit = {
-                    viewModel.clearHabit(HabitIntegrationRepository.Slot.PHOTO_ADDED)
-                },
+                faceScoreHabit = state.faceScoreHabit,
+                bodyScoreHabit = state.bodyScoreHabit,
+                scoreSyncInProgress = state.scoreSyncInProgress,
+                onSelectHabit = { slot, entry -> viewModel.selectHabit(slot, entry) },
+                onClearHabit = { slot -> viewModel.clearHabit(slot) },
+                onSendScores = { viewModel.sendScoresNow() },
                 onRefresh = { viewModel.loadHabits() }
             )
 
@@ -350,12 +350,14 @@ private fun TailAppIntegrationCard(
     isLoading: Boolean,
     habitAppUnavailable: Boolean,
     photoAddedHabit: HabitSlotSelection,
-    onSelectHabit: (HabitEntry) -> Unit,
-    onClearHabit: () -> Unit,
+    faceScoreHabit: HabitSlotSelection,
+    bodyScoreHabit: HabitSlotSelection,
+    scoreSyncInProgress: Boolean,
+    onSelectHabit: (HabitIntegrationRepository.Slot, HabitEntry) -> Unit,
+    onClearHabit: (HabitIntegrationRepository.Slot) -> Unit,
+    onSendScores: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -376,7 +378,8 @@ private fun TailAppIntegrationCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Tail App Integration", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Choose which habit to increment when a photo is added.",
+                        "Choose which habit to increment when a photo is added, and which " +
+                                "habits receive the daily skin scores.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -410,77 +413,163 @@ private fun TailAppIntegrationCard(
 
             HorizontalDivider()
 
-            // Single slot: Photo Added
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Photo Added", style = MaterialTheme.typography.bodyMedium)
-                        if (photoAddedHabit.isSet) {
-                            Text(
-                                photoAddedHabit.displayName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Text(
-                                "Not set",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            HabitSlotRow(
+                title = "Photo Added",
+                subtitle = "Incremented once per photo.",
+                selection = photoAddedHabit,
+                habitList = habitList,
+                onSelect = { entry ->
+                    onSelectHabit(HabitIntegrationRepository.Slot.PHOTO_ADDED, entry)
+                },
+                onClear = { onClearHabit(HabitIntegrationRepository.Slot.PHOTO_ADDED) }
+            )
+
+            HorizontalDivider()
+
+            HabitSlotRow(
+                title = "Face Skin Score",
+                subtitle = "Daily average face rating is written as the habit's value per day.",
+                selection = faceScoreHabit,
+                habitList = habitList,
+                onSelect = { entry ->
+                    onSelectHabit(HabitIntegrationRepository.Slot.FACE_SCORE, entry)
+                },
+                onClear = { onClearHabit(HabitIntegrationRepository.Slot.FACE_SCORE) }
+            )
+
+            HabitSlotRow(
+                title = "Body Skin Score",
+                subtitle = "Daily average body rating is written as the habit's value per day.",
+                selection = bodyScoreHabit,
+                habitList = habitList,
+                onSelect = { entry ->
+                    onSelectHabit(HabitIntegrationRepository.Slot.BODY_SCORE, entry)
+                },
+                onClear = { onClearHabit(HabitIntegrationRepository.Slot.BODY_SCORE) }
+            )
+
+            HorizontalDivider()
+
+            // Manual full-history push (bypasses the daily throttle)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Score History", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Sent automatically once a day when a photo is added. " +
+                                "Past scores shift as comparisons are made, so the full " +
+                                "history is re-sent (only changed days are transmitted).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (scoreSyncInProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = onSendScores,
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        enabled = faceScoreHabit.isSet || bodyScoreHabit.isSet
                     ) {
-                        if (photoAddedHabit.isSet) {
-                            IconButton(onClick = onClearHabit, modifier = Modifier.size(32.dp)) {
-                                Icon(
-                                    Icons.Default.Clear,
-                                    contentDescription = "Clear",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        OutlinedButton(
-                            onClick = { isExpanded = !isExpanded },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                if (photoAddedHabit.isSet) "Change" else "Set",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                        Text("Send Scores Now", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+        }
+    }
+}
 
-                if (isExpanded) {
-                    Spacer(Modifier.height(8.dp))
-                    if (habitList.isEmpty()) {
-                        Text(
-                            "No habits available. Tap Refresh above.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp)
+@Composable
+private fun HabitSlotRow(
+    title: String,
+    subtitle: String,
+    selection: HabitSlotSelection,
+    habitList: List<HabitEntry>,
+    onSelect: (HabitEntry) -> Unit,
+    onClear: () -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium)
+                if (selection.isSet) {
+                    Text(
+                        selection.displayName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(
+                        "Not set",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (selection.isSet) {
+                    IconButton(onClick = onClear, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = "Clear",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        habitList.forEach { entry ->
-                            HabitPickerRow(
-                                entry = entry,
-                                isSelected = entry.habitId == photoAddedHabit.habitId,
-                                onClick = {
-                                    onSelectHabit(entry)
-                                    isExpanded = false
-                                }
-                            )
-                        }
                     }
+                }
+                OutlinedButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        if (selection.isSet) "Change" else "Set",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        if (isExpanded) {
+            Spacer(Modifier.height(8.dp))
+            if (habitList.isEmpty()) {
+                Text(
+                    "No habits available. Tap Refresh above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            } else {
+                habitList.forEach { entry ->
+                    HabitPickerRow(
+                        entry = entry,
+                        isSelected = entry.habitId == selection.habitId,
+                        onClick = {
+                            onSelect(entry)
+                            isExpanded = false
+                        }
+                    )
                 }
             }
         }

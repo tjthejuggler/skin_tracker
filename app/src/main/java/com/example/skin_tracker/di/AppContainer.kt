@@ -1,6 +1,8 @@
 package com.example.skin_tracker.di
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.util.LruCache
 import com.example.skin_tracker.data.backup.BackupManager
 import com.example.skin_tracker.data.backup.BackupPreferences
 import com.example.skin_tracker.data.db.AppDatabase
@@ -21,6 +23,19 @@ class AppContainer(val context: Context) {
 
     val photoFileStore by lazy { PhotoFileStore(context) }
 
+    /**
+     * In-memory LRU cache for normalised face bitmaps used by the chart
+     * animation. Keyed by photo file path. Sized to ~1/8 of max heap.
+     */
+    val faceBitmapCache: LruCache<String, Bitmap> by lazy {
+        val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+        val cacheSizeKb = maxMemoryKb / 8
+        object : LruCache<String, Bitmap>(cacheSizeKb) {
+            override fun sizeOf(key: String, value: Bitmap): Int =
+                (value.allocationByteCount / 1024)
+        }
+    }
+
     val photoRepository by lazy { PhotoRepository(database.photoDao()) }
 
     val comparisonRepository by lazy { ComparisonRepository(database.comparisonDao()) }
@@ -36,7 +51,7 @@ class AppContainer(val context: Context) {
     }
 
     val habitIntegrationRepository by lazy {
-        HabitIntegrationRepository(context, habitPrefs)
+        HabitIntegrationRepository(context, habitPrefs, photoRepository)
     }
 
     val debugPreferences by lazy { DebugPreferences(context) }

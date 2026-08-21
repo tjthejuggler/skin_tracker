@@ -86,6 +86,8 @@ class GalleryViewModel(
                     // Skip failed imports
                 }
             }
+            // Piggyback the daily score-history sync on the usage signal.
+            habitIntegrationRepository.syncScoreHistory()
             _isImporting.value = false
         }
     }
