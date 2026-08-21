@@ -1,18 +1,16 @@
-# ADR: Tail score-history sync (Face/Body Skin Score slots)
+# ADR: Day Notes feature (2026-08-21)
 
 ## Context
-Elo ratings of past photos keep drifting as new comparisons are made, so a "send only today's score" integration would leave Tail's copy stale. At the same time, pushing the history on every comparison would spam Tail with redundant broadcasts.
+Users want to annotate arbitrary days (today or past) with short notes and see them as small markers on the Elo chart, with per-chart targeting (Both / Face / Body). Notes must survive the uninstall-proof backup/restore cycle.
 
 ## Decision
-- Two new integration slots on `HabitIntegrationRepository.Slot`: `FACE_SCORE` and `BODY_SCORE`, each mapped by the user to a Tail habit and bound to a `Category`.
-- Daily score = average Elo rating of that category's photos captured that day (local timezone), rounded to a positive Int (real scores are ~1500, always ≥ 1).
-- Transport: Tail's existing `HabitValueSetReceiver` (`com.example.tail.ACTION_SET_HABIT_VALUES`, extras `EXTRA_HABIT_ID` + `EXTRA_VALUES_JSON`), which SETs (replaces) per-date values — idempotent.
-- Efficiency: the full history is the source of truth, but only dates whose values differ from the last successfully sent snapshot (persisted per slot in SharedPreferences as JSON) are broadcast; the snapshot is updated after a successful dispatch.
-- Deletion handling: days present in the last-sent snapshot but absent from the current history (photos deleted / soft-deleted photos excluded by the DAO) are sent with value **0**. Tail (updated in lockstep) interprets 0 as "clear this date's entry" and removes it from the habits file. WAGS is unaffected (it never sends 0).
-- Cadence: sync runs at most once per calendar day (ISO-date throttle key `last_score_sync_day`), piggybacked on the photo-added usage signal via `notifyPhotoAdded()` (capture) and a post-import `syncScoreHistory()` call (gallery import). Never triggered by comparisons.
-- Manual override: "Send Scores Now" button in Settings → Tail App Integration calls `syncScoreHistory(force = true)` and surfaces the result as a snackbar.
+1. **Storage**: New Room table `notes` (DB v1→v2, `MIGRATION_1_2`). Rows keyed by `epochDay` (`LocalDate.toEpochDay`) instead of epoch-millis — DST-safe, timezone-independent day identity. Multiple notes per day allowed (index on epochDay, not unique).
+2. **Targeting**: `NoteTarget` enum (BOTH default, FACE, BODY) stored as a string column; `appliesTo(Category)` decides chart visibility. Chart markers are amber dots (`#FFD54F`) drawn as a transparent-line LineDataSet just below the data (minY − 12% span), with `axisLeft.axisMinimum` temporarily lowered to keep them visible and reset when no notes apply.
+3. **UI**: `DayNoteDialog` (ui/notes) — Material3 DatePicker constrained to today/past, per-day note list with edit/delete, target chips. Entry point is a sticky-note IconButton in the chart period-nav row (tinted primary when the current chart has notes). Notes flow through ChartViewModel (state combine now includes NoteRepository.getAll()).
+4. **Backup**: `backup.json` manifest v2 adds a `notes` array; restore parses it optionally (v1 manifests restore with zero notes). `RestoreResult.Success` gained `noteCount` with a default value so existing callers compile unchanged.
+5. **Habit picker fix** (same session): Tail's HabitsContentProvider now filters blank and `app_link:` pseudo-habit names at the source; skin_tracker's `fetchHabits()` also filters/dedupes defensively, and the Settings habit picker gained a search field with a height-capped scrollable list.
 
 ## Consequences
-- Tail's copy converges to the full history at most one day behind, with only changed/cleared dates on the wire; deleted days are fully removed from Tail.
-- Tail-side protocol change: `HabitValueSetReceiver` now accepts values ≥ 0 and `HabitsRepository.setHabitValuesForDates` removes entries for values ≤ 0 — requires the updated Tail APK to be installed alongside.
-- If a broadcast is dispatched but Tail fails to process it, the local snapshot would wrongly consider it sent; the next day's sync only re-sends once values change again. The "Send Scores Now" button bypasses the daily throttle but not the snapshot.
+- DB migration is additive; no data loss risk.
+- Old backups (manifest v1) restore cleanly without notes.
+- Chart marker Y position is derived from visible photo min/max, so marks stay below the curve across zoom/ranges.

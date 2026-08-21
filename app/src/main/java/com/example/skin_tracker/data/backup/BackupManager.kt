@@ -6,8 +6,11 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.example.skin_tracker.data.entity.ComparisonEntity
 import com.example.skin_tracker.data.repo.ComparisonRepository
+import com.example.skin_tracker.data.repo.NoteRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.domain.model.Category
+import com.example.skin_tracker.domain.model.DayNote
+import com.example.skin_tracker.domain.model.NoteTarget
 import com.example.skin_tracker.domain.model.Photo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -58,6 +61,7 @@ class BackupManager(
     private val context: Context,
     private val photoRepository: PhotoRepository,
     private val comparisonRepository: ComparisonRepository,
+    private val noteRepository: NoteRepository,
     private val backupPrefs: BackupPreferences
 ) {
     /** Serializes backup/restore so overlapping auto-triggers can't corrupt the folder. */
@@ -72,7 +76,12 @@ class BackupManager(
     }
 
     sealed class RestoreResult {
-        data class Success(val photoCount: Int, val imagesRestored: Int, val comparisonCount: Int) : RestoreResult()
+        data class Success(
+            val photoCount: Int,
+            val imagesRestored: Int,
+            val comparisonCount: Int,
+            val noteCount: Int = 0
+        ) : RestoreResult()
         data class Failure(val message: String) : RestoreResult()
     }
 
@@ -95,6 +104,7 @@ class BackupManager(
 
                 val photos = photoRepository.getAllSync()
                 val comparisons = comparisonRepository.getAllSync()
+                val notes = noteRepository.getAllSync()
 
                 // Create a zip file containing all images
                 val zipFile = root.findFile(IMAGES_ZIP)?.takeIf { it.isFile }
@@ -127,7 +137,7 @@ class BackupManager(
                 } ?: return@withLock Result.Failure("Cannot write to zip file")
 
                 // Always rewrite the (small) manifest.
-                val manifest = buildManifest(photos, comparisons)
+                val manifest = buildManifest(photos, comparisons, notes)
                 writeManifest(root, manifest)
 
                 backupPrefs.lastBackupAt = System.currentTimeMillis()
@@ -163,7 +173,7 @@ class BackupManager(
                     ?.bufferedReader()?.use { it.readText() }
                     ?: return@withLock RestoreResult.Failure("Cannot read backup.json")
 
-                val (photos, comparisons) = parseManifest(json)
+                val (photos, comparisons, notes) = parseManifest(json)
 
                 val zipFile = root.findFile(IMAGES_ZIP)?.takeIf { it.isFile }
                     ?: return@withLock RestoreResult.Failure("No images.zip found in folder")
@@ -214,12 +224,16 @@ class BackupManager(
                     }
                 }
                 for (comparison in comparisons) comparisonRepository.upsertWithId(comparison)
+                noteRepository.clearAll()
+                for (note in notes) noteRepository.upsertWithId(note)
 
-                Log.i(TAG, "Restore complete: ${remapped.size} photos, $restoredImages images restored, ${comparisons.size} comparisons")
+                Log.i(TAG, "Restore complete: ${remapped.size} photos, $restoredImages images restored, " +
+                        "${comparisons.size} comparisons, ${notes.size} notes")
                 RestoreResult.Success(
                     photoCount = remapped.size,
                     imagesRestored = restoredImages,
-                    comparisonCount = comparisons.size
+                    comparisonCount = comparisons.size,
+                    noteCount = notes.size
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Restore failed", e)
@@ -251,7 +265,11 @@ class BackupManager(
 
     // ── Manifest (de)serialization ──────────────────────────────────────────
 
-    private fun buildManifest(photos: List<Photo>, comparisons: List<ComparisonEntity>): String {
+    private fun buildManifest(
+        photos: List<Photo>,
+        comparisons: List<ComparisonEntity>,
+        notes: List<DayNote>
+    ): String {
         val photosArr = JSONArray()
         photos.forEach { p ->
             photosArr.put(JSONObject().apply {
@@ -282,15 +300,27 @@ class BackupManager(
                 put("loserRatingAfter", c.loserRatingAfter)
             })
         }
+        val notesArr = JSONArray()
+        notes.forEach { n ->
+            notesArr.put(JSONObject().apply {
+                put("id", n.id)
+                put("epochDay", n.epochDay)
+                put("text", n.text)
+                put("target", n.target.name)
+                put("createdAt", n.createdAt)
+                put("updatedAt", n.updatedAt)
+            })
+        }
         return JSONObject().apply {
             put("version", MANIFEST_VERSION)
             put("createdAt", System.currentTimeMillis())
             put("photos", photosArr)
             put("comparisons", comparisonsArr)
+            put("notes", notesArr)
         }.toString(2)
     }
 
-    private fun parseManifest(json: String): Pair<List<Photo>, List<ComparisonEntity>> {
+    private fun parseManifest(json: String): Triple<List<Photo>, List<ComparisonEntity>, List<DayNote>> {
         val root = JSONObject(json)
 
         val photos = mutableListOf<Photo>()
@@ -333,13 +363,30 @@ class BackupManager(
                 )
             )
         }
-        return photos to comparisons
+        // Notes were added in manifest v2; older backups simply have none.
+        val notes = mutableListOf<DayNote>()
+        val notesArr = root.optJSONArray("notes") ?: JSONArray()
+        for (i in 0 until notesArr.length()) {
+            val o = notesArr.getJSONObject(i)
+            notes.add(
+                DayNote(
+                    id = o.getLong("id"),
+                    epochDay = o.getLong("epochDay"),
+                    text = o.getString("text"),
+                    target = runCatching { NoteTarget.valueOf(o.getString("target")) }
+                        .getOrDefault(NoteTarget.BOTH),
+                    createdAt = o.optLong("createdAt", 0L),
+                    updatedAt = o.optLong("updatedAt", 0L)
+                )
+            )
+        }
+        return Triple(photos, comparisons, notes)
     }
 
     companion object {
         private const val BACKUP_DIR = "SkinTrackerBackup"
         private const val IMAGES_ZIP = "images.zip"
         private const val MANIFEST_NAME = "backup.json"
-        private const val MANIFEST_VERSION = 1
+        private const val MANIFEST_VERSION = 2
     }
 }

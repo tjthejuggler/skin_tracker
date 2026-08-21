@@ -9,6 +9,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **🤖 Auto Face/Body Detection** — Automatically tags photos as Face or Body using on-device face detection (Android built-in FaceDetector)
 - **⚖️ Compare Mode** — Two random photos shown side-by-side; tap the one where your skin looks better
 - **📊 Interactive Charts** — Zoomable, pannable Elo rating chart with time-range filters (1W/1M/3M/6M/1Y/All), period step arrows (←/→) to navigate back/forward by the selected time unit, daily average overlay, and tap-to-view photo details
+- **📝 Day Notes** — Attach short notes to any day (today or the past); they appear as small amber dots on the chart, targetable at Both/Face/Body, and are included in backup & restore
 - **🏷️ Categories** — Face and Body tracked separately
 - **📈 Elo Rating** — Each photo starts at 1500; comparisons update ratings using K=32 Elo system
 - **🔍 Photo Detail** — Full-screen view with swipe between same-day photos, rating stats, and delete
@@ -49,6 +50,19 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 2. **Compare** — The app shows you two random photos from the same category. Tap the one where your psoriasis looks better. The Elo rating updates for both photos.
 3. **Track** — The chart screen shows your Elo rating over time. Per-photo data points are connected by a line; a dashed daily-average overlay appears when a day has multiple photos.
 4. **Pair Selection** — Random within category, biased toward photos with fewer comparisons so new uploads catch up faster.
+
+## Day Notes
+
+*(Added 2026-08-21)* The chart screen has a sticky-note button next to the period navigation arrows. It opens a compact dialog where you can:
+
+- **Pick any day** — defaults to today; the date picker allows today and any past date (no future dates).
+- **Write a note** — short free text; multiple notes per day are supported.
+- **Target a chart** — **Both** (default), **Face only**, or **Body only**. Notes appear as small amber dots just below the curve on the chart(s) they target; the sticky-note icon is tinted when the current chart has notes.
+- **Edit / delete** — existing notes for the selected day are listed in the dialog; tap to edit, trash icon to delete.
+
+The photo bottom sheet (tap any chart point) also gained **← / → day-stepping arrows** overlaid on the photo — each tap jumps to the nearest photo on the previous/next day within the visible time range — plus a **Note** button that opens the note dialog pre-set to that photo's day, and any notes already on that day are shown in the sheet.
+
+Notes live in the Room `notes` table (DB v2, epoch-day keyed so they are DST-safe) and are serialized into the `backup.json` manifest (manifest v2) so they survive the uninstall-proof backup/restore cycle. The Tail habit picker in Settings also gained a search filter and no longer shows blank placeholder rows.
 
 ## Backup & Restore
 

@@ -1,6 +1,7 @@
 package com.example.skin_tracker.ui.chart
 
 import android.graphics.Color
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,17 +13,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -35,13 +40,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
+import com.example.skin_tracker.domain.model.DayNote
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.ui.components.SelectableChip
+import com.example.skin_tracker.ui.notes.DayNoteDialog
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.Entry
@@ -52,6 +60,8 @@ import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 
@@ -65,6 +75,10 @@ fun ChartScreen(
     val state by viewModel.state.collectAsState()
     val sheetState = rememberModalBottomSheetState()
     var chartRef by remember { mutableStateOf<LineChart?>(null) }
+    var showNoteDialog by remember { mutableStateOf(false) }
+    // Day the note dialog should open on (null = today). Set when opening
+    // from the photo bottom sheet so the note targets the shown photo's day.
+    var noteDialogDay by remember { mutableStateOf<Long?>(null) }
 
     val animationActive = state.animationPlaying || state.animationPreparing
 
@@ -151,42 +165,66 @@ fun ChartScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Period navigation: ← label →
+            // Period navigation: ← label →  (+ day-note button)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = { viewModel.stepBack() },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Previous period",
-                        modifier = Modifier.size(20.dp)
+                    IconButton(
+                        onClick = { viewModel.stepBack() },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Previous period",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Text(
+                        text = state.periodLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    IconButton(
+                        onClick = { viewModel.stepForward() },
+                        enabled = state.periodOffset > 0,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Next period",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
 
-                Text(
-                    text = state.periodLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
+                // Day notes: tinted when at least one note is visible on this chart
+                val hasVisibleNotes = state.notes.any { it.target.appliesTo(state.category) }
                 IconButton(
-                    onClick = { viewModel.stepForward() },
-                    enabled = state.periodOffset > 0,
+                    onClick = {
+                        noteDialogDay = null
+                        showNoteDialog = true
+                    },
                     colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        contentColor = if (hasVisibleNotes) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Next period",
+                        Icons.Default.StickyNote2,
+                        contentDescription = "Day notes",
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -217,6 +255,8 @@ fun ChartScreen(
             // Chart
             val photos = state.photos
             val timeRange = state.timeRange
+            val notes = state.notes
+            val category = state.category
             val onPhotoSelected: (Photo) -> Unit = { photo -> viewModel.onPhotoSelected(photo) }
 
             AndroidView(
@@ -278,7 +318,7 @@ fun ChartScreen(
 
                         override fun onNothingSelected() {}
                     })
-                    updateChart(chart, photos, timeRange)
+                    updateChart(chart, photos, timeRange, notes, category)
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -287,16 +327,46 @@ fun ChartScreen(
         }
     }
 
+    // Day notes dialog
+    if (showNoteDialog) {
+        DayNoteDialog(
+            notes = state.notes,
+            initialEpochDay = noteDialogDay,
+            onDismiss = { showNoteDialog = false },
+            onSave = viewModel::saveNote,
+            onDelete = viewModel::deleteNote
+        )
+    }
+
     // Bottom sheet for selected photo
     if (state.showBottomSheet && state.selectedPhoto != null) {
+        val photo = state.selectedPhoto!!
+        val zone = ZoneId.systemDefault()
+        val photoDay = Instant.ofEpochMilli(photo.capturedAt).atZone(zone).toLocalDate()
+        val hasEarlierDay = state.photos.any {
+            Instant.ofEpochMilli(it.capturedAt).atZone(zone).toLocalDate() < photoDay
+        }
+        val hasLaterDay = state.photos.any {
+            Instant.ofEpochMilli(it.capturedAt).atZone(zone).toLocalDate() > photoDay
+        }
+        val dayNotes = state.notes.filter { it.epochDay == photoDay.toEpochDay() }
+
         ModalBottomSheet(
             onDismissRequest = { viewModel.dismissBottomSheet() },
             sheetState = sheetState
         ) {
             PhotoBottomSheet(
-                photo = state.selectedPhoto!!,
+                photo = photo,
+                dayNotes = dayNotes,
+                hasEarlierDay = hasEarlierDay,
+                hasLaterDay = hasLaterDay,
+                onStepDay = { forward -> viewModel.stepSelectedPhotoDay(forward) },
+                onAddNote = {
+                    noteDialogDay = photoDay.toEpochDay()
+                    showNoteDialog = true
+                },
                 onPhotoClick = {
-                    onPhotoClick(state.selectedPhoto!!.id)
+                    onPhotoClick(photo.id)
                     viewModel.dismissBottomSheet()
                 }
             )
@@ -304,7 +374,13 @@ fun ChartScreen(
     }
 }
 
-private fun updateChart(chart: LineChart, photos: List<Photo>, timeRange: TimeRange) {
+private fun updateChart(
+    chart: LineChart,
+    photos: List<Photo>,
+    timeRange: TimeRange,
+    notes: List<DayNote>,
+    category: Category
+) {
     if (photos.isEmpty()) return
 
     // Per-photo entries
@@ -339,6 +415,36 @@ private fun updateChart(chart: LineChart, photos: List<Photo>, timeRange: TimeRa
     val dataSets = mutableListOf(photoDataSet)
     avgDataSet?.let { dataSets.add(it) }
 
+    // ── Day-note markers ─────────────────────────────────────────────────
+    // Small amber dots just below the data on every day that carries a note
+    // applicable to the current category (Both / Face / Body).
+    val visibleNotes = notes.filter { it.target.appliesTo(category) }
+    if (visibleNotes.isEmpty()) {
+        chart.axisLeft.resetAxisMinimum()
+    } else {
+        val minY = photos.minOf { it.rating }
+        val maxY = photos.maxOf { it.rating }
+        val span = maxOf(maxY - minY, 1.0)
+        val markY = (minY - span * 0.12).toFloat()
+
+        val noteEntries = visibleNotes.map { note ->
+            Entry(note.chartTimestampMillis().toFloat(), markY)
+        }
+        dataSets.add(
+            LineDataSet(noteEntries, "Notes").apply {
+                color = Color.TRANSPARENT          // no connecting line
+                lineWidth = 0f
+                setCircleColor(Color.parseColor("#FFD54F"))  // Amber
+                circleRadius = 5f
+                setDrawCircleHole(false)
+                setDrawValues(false)
+                isHighlightEnabled = false
+            }
+        )
+        // Make room beneath the curve so the markers stay visible.
+        chart.axisLeft.axisMinimum = markY - (span * 0.04).toFloat()
+    }
+
     chart.data = LineData(dataSets.toList())
     chart.invalidate()
 }
@@ -361,6 +467,11 @@ private fun computeMovingAverage(entries: List<Entry>, window: Int): List<Entry>
 @Composable
 private fun PhotoBottomSheet(
     photo: Photo,
+    dayNotes: List<DayNote>,
+    hasEarlierDay: Boolean,
+    hasLaterDay: Boolean,
+    onStepDay: (forward: Boolean) -> Unit,
+    onAddNote: () -> Unit,
     onPhotoClick: () -> Unit
 ) {
     Column(
@@ -369,14 +480,49 @@ private fun PhotoBottomSheet(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AsyncImage(
-            model = File(photo.uri),
-            contentDescription = "Selected photo",
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(300.dp),
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit
-        )
+        // Photo with day-stepping arrows overlaid on the sides
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = File(photo.uri),
+                contentDescription = "Selected photo",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
+
+            if (hasEarlierDay) {
+                IconButton(
+                    onClick = { onStepDay(false) },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Previous day",
+                        tint = androidx.compose.ui.graphics.Color.White
+                    )
+                }
+            }
+            if (hasLaterDay) {
+                IconButton(
+                    onClick = { onStepDay(true) },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Next day",
+                        tint = androidx.compose.ui.graphics.Color.White
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -396,10 +542,43 @@ private fun PhotoBottomSheet(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        // Notes attached to this day
+        if (dayNotes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            dayNotes.forEach { note ->
+                Text(
+                    text = "📝 ${note.target.label}: ${note.text}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
-        androidx.compose.material3.FilledTonalButton(onClick = onPhotoClick) {
-            Text("View Full Photo")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalButton(
+                onClick = onPhotoClick,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("View Full Photo")
+            }
+            OutlinedButton(onClick = onAddNote) {
+                Icon(
+                    Icons.Default.StickyNote2,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Note")
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))

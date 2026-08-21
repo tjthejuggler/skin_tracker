@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -561,15 +564,56 @@ private fun HabitSlotRow(
                     modifier = Modifier.padding(start = 4.dp)
                 )
             } else {
-                habitList.forEach { entry ->
-                    HabitPickerRow(
-                        entry = entry,
-                        isSelected = entry.habitId == selection.habitId,
-                        onClick = {
-                            onSelect(entry)
-                            isExpanded = false
-                        }
+                // Search filter — the Tail app can expose dozens of habits.
+                var searchQuery by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search habits") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    shape = MaterialTheme.shapes.small
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                val filtered = if (searchQuery.isBlank()) habitList
+                else habitList.filter {
+                    it.habitName.contains(searchQuery.trim(), ignoreCase = true)
+                }
+
+                if (filtered.isEmpty()) {
+                    Text(
+                        "No habits match \"${searchQuery.trim()}\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 280.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        filtered.forEach { entry ->
+                            HabitPickerRow(
+                                entry = entry,
+                                isSelected = entry.habitId == selection.habitId,
+                                onClick = {
+                                    onSelect(entry)
+                                    isExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -86,16 +86,21 @@ class HabitIntegrationRepository(
                 val nameIdx = cursor.getColumnIndexOrThrow(COL_HABIT_NAME)
                 while (cursor.moveToNext()) {
                     val name = cursor.getString(nameIdx)
-                    results += HabitEntry(
-                        habitId   = name,
-                        habitName = name
-                    )
+                    // Older Tail providers expose blank placeholder slots and
+                    // "app_link:" pseudo-habits — skip them so the picker
+                    // doesn't fill up with empty rows.
+                    if (!name.isNullOrBlank() && !name.startsWith("app_link:")) {
+                        results += HabitEntry(
+                            habitId   = name,
+                            habitName = name
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "fetchHabits: could not query Tail app — ${e.message}")
         }
-        results
+        results.distinctBy { it.habitId }
     }
 
     // ── Per-slot persistence ──────────────────────────────────────────────────

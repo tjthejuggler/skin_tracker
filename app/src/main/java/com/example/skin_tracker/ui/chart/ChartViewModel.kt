@@ -6,9 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.skin_tracker.SkinTrackerApp
+import com.example.skin_tracker.data.repo.NoteRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.di.AppContainer
 import com.example.skin_tracker.domain.model.Category
+import com.example.skin_tracker.domain.model.DayNote
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.util.FaceNormalizer
 import kotlinx.coroutines.Job
@@ -23,6 +25,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -56,6 +60,7 @@ data class ChartState(
     val timeRange: TimeRange = TimeRange.ONE_MONTH,
     val periodOffset: Int = 0,
     val photos: List<Photo> = emptyList(),
+    val notes: List<DayNote> = emptyList(),
     val selectedPhoto: Photo? = null,
     val showBottomSheet: Boolean = false,
     val periodLabel: String = "",
@@ -69,6 +74,7 @@ data class ChartState(
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ChartViewModel(
     private val photoRepository: PhotoRepository,
+    private val noteRepository: NoteRepository,
     private val appContainer: AppContainer
 ) : ViewModel() {
 
@@ -81,6 +87,7 @@ class ChartViewModel(
 
     private data class ChartData(
         val photos: List<Photo>,
+        val notes: List<DayNote>,
         val category: Category,
         val timeRange: TimeRange,
         val periodOffset: Int
@@ -93,9 +100,10 @@ class ChartViewModel(
             },
             appContainer.sharedCategory,
             _timeRange,
-            _periodOffset
-        ) { photos, category, timeRange, offset ->
-            ChartData(photos, category, timeRange, offset)
+            _periodOffset,
+            noteRepository.getAll()
+        ) { photos, category, timeRange, offset, notes ->
+            ChartData(photos, notes, category, timeRange, offset)
         },
         _selectedPhoto,
         _showBottomSheet,
@@ -107,6 +115,7 @@ class ChartViewModel(
             timeRange = data.timeRange,
             periodOffset = data.periodOffset,
             photos = filtered,
+            notes = data.notes,
             selectedPhoto = selectedPhoto,
             showBottomSheet = showBottomSheet,
             periodLabel = label,
@@ -322,6 +331,35 @@ class ChartViewModel(
         }
     }
 
+    // ── Day notes ────────────────────────────────────────────────────────
+
+    /** Inserts or updates a day note (id == 0 inserts). */
+    fun saveNote(note: DayNote) {
+        viewModelScope.launch { noteRepository.save(note) }
+    }
+
+    fun deleteNote(id: Long) {
+        viewModelScope.launch { noteRepository.delete(id) }
+    }
+
+    /**
+     * Steps the bottom-sheet photo to the nearest photo on an earlier/later
+     * day (within the currently visible time range). Multiple photos on the
+     * same day are skipped — the sheet navigates one day at a time.
+     */
+    fun stepSelectedPhotoDay(forward: Boolean) {
+        val current = _selectedPhoto.value ?: return
+        val zone = ZoneId.systemDefault()
+        val currentDay = Instant.ofEpochMilli(current.capturedAt).atZone(zone).toLocalDate()
+        val candidates = state.value.photos.filter { photo ->
+            val day = Instant.ofEpochMilli(photo.capturedAt).atZone(zone).toLocalDate()
+            if (forward) day > currentDay else day < currentDay
+        }
+        val next = if (forward) candidates.minByOrNull { it.capturedAt }
+                   else candidates.maxByOrNull { it.capturedAt }
+        if (next != null) _selectedPhoto.value = next
+    }
+
     fun onPhotoSelected(photo: Photo) {
         _selectedPhoto.value = photo
         _showBottomSheet.value = true
@@ -339,11 +377,11 @@ class ChartViewModel(
         // Bitmaps are owned by the AppContainer LruCache — do not recycle here.
     }
 
-    class Factory(private val application: Application) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val container = (application as SkinTrackerApp).container
-            return ChartViewModel(container.photoRepository, container) as T
-        }
+class Factory(private val application: Application) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val container = (application as SkinTrackerApp).container
+        return ChartViewModel(container.photoRepository, container.noteRepository, container) as T
     }
+}
 }
