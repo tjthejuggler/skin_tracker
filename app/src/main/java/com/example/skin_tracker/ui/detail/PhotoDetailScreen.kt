@@ -1,5 +1,8 @@
 package com.example.skin_tracker.ui.detail
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,18 +46,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
+import com.example.skin_tracker.ui.components.photoSharedElementModifier
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun PhotoDetailScreen(
     photoId: Long,
     onBack: () -> Unit,
     onEditPhoto: (Long) -> Unit,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     viewModel: PhotoDetailViewModel = viewModel(factory = PhotoDetailViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -122,7 +128,12 @@ fun PhotoDetailScreen(
                 PhotoDetailView(
                     photo = photo,
                     onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) },
-                    onCategoryChange = { newCategory -> viewModel.changeCategory(newCategory) }
+                    onCategoryChange = { newCategory -> viewModel.changeCategory(newCategory) },
+                    sharedElementModifier = photoSharedElementModifier(
+                        sharedTransitionScope,
+                        animatedVisibilityScope,
+                        photo.id
+                    )
                 )
             }
 
@@ -167,7 +178,8 @@ fun PhotoDetailScreen(
 private fun PhotoDetailView(
     photo: Photo,
     onDateChanged: (Long) -> Unit,
-    onCategoryChange: (Category) -> Unit
+    onCategoryChange: (Category) -> Unit,
+    sharedElementModifier: Modifier = Modifier
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showCategoryDialog by remember { mutableStateOf(false) }
@@ -181,7 +193,7 @@ private fun PhotoDetailView(
         AsyncImage(
             model = File(photo.uri),
             contentDescription = "Photo detail",
-            modifier = Modifier
+            modifier = sharedElementModifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentScale = ContentScale.Fit

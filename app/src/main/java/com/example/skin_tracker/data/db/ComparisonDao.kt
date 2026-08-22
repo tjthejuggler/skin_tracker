@@ -30,6 +30,9 @@ interface ComparisonDao {
     @Query("SELECT * FROM comparisons WHERE id = :id")
     suspend fun getById(id: Long): ComparisonEntity?
 
+    @Query("SELECT * FROM comparisons WHERE category = :category ORDER BY comparedAt DESC, id DESC LIMIT 1")
+    suspend fun getLatestByCategory(category: String): ComparisonEntity?
+
     @Query("UPDATE comparisons SET winnerPhotoId = :newWinnerId, loserPhotoId = :newLoserId, winnerRatingBefore = :wBefore, loserRatingBefore = :lBefore, winnerRatingAfter = :wAfter, loserRatingAfter = :lAfter WHERE id = :id")
     suspend fun updateFlip(id: Long, newWinnerId: Long, newLoserId: Long, wBefore: Double, lBefore: Double, wAfter: Double, lAfter: Double)
 

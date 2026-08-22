@@ -16,6 +16,10 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
     suspend fun getById(id: Long): ComparisonEntity? =
         comparisonDao.getById(id)
 
+    /** Most recent comparison recorded for a category (undo support). */
+    suspend fun getLatestByCategory(category: Category): ComparisonEntity? =
+        comparisonDao.getLatestByCategory(category.name)
+
     /** Restore-time insert that preserves the comparison's id. */
     suspend fun upsertWithId(comparison: ComparisonEntity) =
         comparisonDao.upsertWithId(comparison)

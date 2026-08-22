@@ -24,6 +24,7 @@ data class CompareState(
     val photoB: Photo? = null,
     val comparisonsToday: Int = 0,
     val totalPhotos: Int = 0,
+    val canUndo: Boolean = false,
     val isLoading: Boolean = false
 )
 
@@ -36,6 +37,10 @@ class CompareViewModel(
 
     private val _state = MutableStateFlow(CompareState(category = appContainer.sharedCategory.value))
     val state: StateFlow<CompareState> = _state.asStateFlow()
+
+    /** Comparison made most recently in this session, used to restore exact A/B positions on undo. */
+    private var lastComparisonId: Long? = null
+    private var lastPair: Pair<Photo, Photo>? = null
 
     init {
         loadPair()
@@ -57,6 +62,7 @@ class CompareViewModel(
                 photoA = pair?.first,
                 photoB = pair?.second,
                 totalPhotos = photos.size,
+                canUndo = comparisonRepository.getLatestByCategory(_state.value.category) != null,
                 isLoading = false
             )
         }
@@ -76,7 +82,7 @@ class CompareViewModel(
             photoRepository.updateRating(updatedWinner)
             photoRepository.updateRating(updatedLoser)
 
-            comparisonRepository.insert(
+            val comparisonId = comparisonRepository.insert(
                 winnerPhotoId = updatedWinner.id,
                 loserPhotoId = updatedLoser.id,
                 category = state.category,
@@ -86,11 +92,64 @@ class CompareViewModel(
                 winnerRatingAfter = updatedWinner.rating,
                 loserRatingAfter = updatedLoser.rating
             )
+            lastComparisonId = comparisonId
+            lastPair = a to b
 
             requestAutoBackup()
 
             loadComparisonCount()
             loadPair()
+        }
+    }
+
+    /**
+     * Undo the most recent comparison in the current category: revert both photos'
+     * ratings, delete the comparison record, and show the same pair again so the
+     * user can redo it.
+     */
+    fun undoLastComparison() {
+        val category = _state.value.category
+        viewModelScope.launch {
+            val comp = comparisonRepository.getLatestByCategory(category) ?: return@launch
+            val winner = photoRepository.getById(comp.winnerPhotoId) ?: return@launch
+            val loser = photoRepository.getById(comp.loserPhotoId) ?: return@launch
+
+            // Revert the Elo changes (same revert logic as HistoryViewModel.deleteComparison)
+            val revertedWinner = winner.copy(
+                rating = comp.winnerRatingBefore,
+                comparisonCount = (winner.comparisonCount - 1).coerceAtLeast(0),
+                wins = (winner.wins - 1).coerceAtLeast(0)
+            )
+            val revertedLoser = loser.copy(
+                rating = comp.loserRatingBefore,
+                comparisonCount = (loser.comparisonCount - 1).coerceAtLeast(0),
+                losses = (loser.losses - 1).coerceAtLeast(0)
+            )
+
+            photoRepository.updateRating(revertedWinner)
+            photoRepository.updateRating(revertedLoser)
+            comparisonRepository.delete(comp.id)
+
+            requestAutoBackup()
+
+            // Put the same pair back on screen, preserving the original A/B positions
+            // when this comparison was made in the current session.
+            val rememberedPair = lastPair
+            val knownOrder = lastComparisonId == comp.id && rememberedPair != null
+            val pair = if (knownOrder && rememberedPair.first.id == comp.loserPhotoId) {
+                revertedLoser to revertedWinner
+            } else {
+                revertedWinner to revertedLoser
+            }
+            lastComparisonId = null
+            lastPair = null
+
+            _state.value = _state.value.copy(
+                photoA = pair.first,
+                photoB = pair.second,
+                canUndo = comparisonRepository.getLatestByCategory(category) != null
+            )
+            loadComparisonCount()
         }
     }
 

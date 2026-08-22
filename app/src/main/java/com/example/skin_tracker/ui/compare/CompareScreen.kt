@@ -1,5 +1,8 @@
 package com.example.skin_tracker.ui.compare
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,8 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.skin_tracker.ui.components.SelectableChip
+import com.example.skin_tracker.ui.components.photoSharedElementModifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,10 +42,13 @@ import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import java.io.File
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CompareScreen(
     onHistoryClick: () -> Unit = {},
-    onEditPhoto: (Long) -> Unit = {},
+    onPhotoDetail: (Long) -> Unit = {},
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     viewModel: CompareViewModel = viewModel(factory = CompareViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -117,7 +125,12 @@ fun CompareScreen(
                     photo = state.photoA!!,
                     label = "A",
                     onTap = { viewModel.pickWinner(winnerIsA = true) },
-                    onEditClick = { onEditPhoto(state.photoA!!.id) },
+                    onDetailClick = { onPhotoDetail(state.photoA!!.id) },
+                    sharedElementModifier = photoSharedElementModifier(
+                        sharedTransitionScope,
+                        animatedVisibilityScope,
+                        state.photoA!!.id
+                    ),
                     modifier = Modifier.weight(1f)
                 )
 
@@ -125,7 +138,12 @@ fun CompareScreen(
                     photo = state.photoB!!,
                     label = "B",
                     onTap = { viewModel.pickWinner(winnerIsA = false) },
-                    onEditClick = { onEditPhoto(state.photoB!!.id) },
+                    onDetailClick = { onPhotoDetail(state.photoB!!.id) },
+                    sharedElementModifier = photoSharedElementModifier(
+                        sharedTransitionScope,
+                        animatedVisibilityScope,
+                        state.photoB!!.id
+                    ),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -141,8 +159,18 @@ fun CompareScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                TextButton(
+                    onClick = { viewModel.undoLastComparison() },
+                    enabled = state.canUndo
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Undo")
+                }
+
                 TextButton(onClick = { viewModel.skip() }) {
                     Icon(Icons.Default.SkipNext, contentDescription = "Skip")
                     Spacer(modifier = Modifier.width(4.dp))
@@ -158,30 +186,31 @@ private fun ComparePhotoCard(
     photo: Photo,
     label: String,
     onTap: () -> Unit,
-    onEditClick: () -> Unit = {},
+    onDetailClick: () -> Unit = {},
+    sharedElementModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         AsyncImage(
             model = File(photo.uri),
             contentDescription = "Photo $label",
-            modifier = Modifier
+            modifier = sharedElementModifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )
         
-        // Edit button in top-right corner
+        // Detail button in top-right corner
         IconButton(
-            onClick = onEditClick,
+            onClick = onDetailClick,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(8.dp)
         ) {
             Icon(
-                Icons.Default.Edit,
-                contentDescription = "Edit photo",
+                Icons.Default.Info,
+                contentDescription = "Photo details",
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }
