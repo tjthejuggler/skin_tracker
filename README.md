@@ -60,7 +60,7 @@ A personal psoriasis tracking app for Android. Take daily photos of your face or
 - **Target a chart** — **Both** (default), **Face only**, or **Body only**. Notes appear as small amber dots just below the curve on the chart(s) they target; the sticky-note icon is tinted when the current chart has notes.
 - **Edit / delete** — existing notes for the selected day are listed in the dialog; tap to edit, trash icon to delete.
 
-The photo bottom sheet (tap any chart point) also gained **← / → day-stepping arrows** overlaid on the photo — each tap jumps to the nearest photo on the previous/next day within the visible time range — plus a **Note** button that opens the note dialog pre-set to that photo's day, and any notes already on that day are shown in the sheet.
+The photo bottom sheet (tap any chart point) also gained **← / → day-stepping arrows** overlaid on the photo — each tap jumps to the nearest photo on the previous/next day within the visible time range, and **holding an arrow auto-repeats at an accelerating rate** to rapidly cycle through days. The highlighted node on the chart behind the sheet stays in sync with the shown photo. A **Note** button opens the note dialog pre-set to that photo's day, and any notes already on that day are shown in the sheet.
 
 Notes live in the Room `notes` table (DB v2, epoch-day keyed so they are DST-safe) and are serialized into the `backup.json` manifest (manifest v2) so they survive the uninstall-proof backup/restore cycle. The Tail habit picker in Settings also gained a search filter and no longer shows blank placeholder rows.
 

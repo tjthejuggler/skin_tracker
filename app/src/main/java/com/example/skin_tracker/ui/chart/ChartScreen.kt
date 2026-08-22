@@ -2,6 +2,7 @@ package com.example.skin_tracker.ui.chart
 
 import android.graphics.Color
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +67,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +108,20 @@ fun ChartScreen(
                 false
             )
         }
+    }
+
+    // ── Keep the chart highlight in sync with the bottom-sheet photo ──────
+    // Fires on tap-selection and when day-stepping via the sheet arrows, so
+    // the highlighted node behind the sheet always matches the shown photo.
+    LaunchedEffect(state.selectedPhoto, state.showBottomSheet, animationActive) {
+        val chart = chartRef ?: return@LaunchedEffect
+        if (animationActive) return@LaunchedEffect
+        val photo = state.selectedPhoto
+        if (!state.showBottomSheet || photo == null) {
+            chart.highlightValue(null, false)
+            return@LaunchedEffect
+        }
+        chart.highlightValue(photo.capturedAt.toFloat(), photo.rating.toFloat(), 0, false)
     }
 
     Column(
@@ -495,32 +513,20 @@ private fun PhotoBottomSheet(
             )
 
             if (hasEarlierDay) {
-                IconButton(
+                HoldRepeatArrowButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Previous day (hold to cycle)",
                     onClick = { onStepDay(false) },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Previous day",
-                        tint = androidx.compose.ui.graphics.Color.White
-                    )
-                }
+                    modifier = Modifier.align(Alignment.CenterStart)
+                )
             }
             if (hasLaterDay) {
-                IconButton(
+                HoldRepeatArrowButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Next day (hold to cycle)",
                     onClick = { onStepDay(true) },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Next day",
-                        tint = androidx.compose.ui.graphics.Color.White
-                    )
-                }
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
             }
         }
 
@@ -582,5 +588,62 @@ private fun PhotoBottomSheet(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+/**
+ * Translucent circular arrow button that fires [onClick] once on press and
+ * then keeps re-firing at a quickening interval while held down —
+ * press-and-hold to rapidly cycle through days.
+ */
+@Composable
+private fun HoldRepeatArrowButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isPressed by remember { mutableStateOf(false) }
+
+    // Initial fire on press, a short pause, then accelerating repeats.
+    LaunchedEffect(isPressed) {
+        if (!isPressed) return@LaunchedEffect
+        onClick()
+        delay(320L)
+        var interval = 200L
+        while (isPressed) {
+            onClick()
+            delay(interval)
+            interval = (interval - 30L).coerceAtLeast(80L)
+        }
+    }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(44.dp)
+            .background(
+                androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                CircleShape
+            )
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        try {
+                            awaitRelease()
+                        } finally {
+                            isPressed = false
+                        }
+                    }
+                )
+            }
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
