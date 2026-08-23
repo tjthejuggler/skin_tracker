@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.skin_tracker.ui.components.SelectableChip
 import com.example.skin_tracker.ui.components.photoSharedElementModifier
+import com.example.skin_tracker.ui.components.rememberPhotoImageRequest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,7 +41,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
-import java.io.File
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -192,7 +192,7 @@ private fun ComparePhotoCard(
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         AsyncImage(
-            model = File(photo.uri),
+            model = rememberPhotoImageRequest(photo),
             contentDescription = "Photo $label",
             modifier = sharedElementModifier
                 .fillMaxSize()

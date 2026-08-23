@@ -2,6 +2,8 @@ package com.example.skin_tracker.ui
 
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -173,10 +175,10 @@ fun SkinTrackerApp() {
                     }
                     composable(
                         route = Screen.Compare.route,
-                        enterTransition = { fadeIn(tween(350)) },
-                        exitTransition = { fadeOut(tween(350)) },
-                        popEnterTransition = { fadeIn(tween(350)) },
-                        popExitTransition = { fadeOut(tween(350)) }
+                        enterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
+                        exitTransition = { fadeOut(tween(200, easing = LinearEasing)) },
+                        popEnterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
+                        popExitTransition = { fadeOut(tween(200, easing = LinearEasing)) }
                     ) {
                         CompareScreen(
                             onHistoryClick = {
@@ -212,10 +214,10 @@ fun SkinTrackerApp() {
                     composable(
                         route = Screen.PhotoDetail.route,
                         arguments = listOf(navArgument("photoId") { type = NavType.LongType }),
-                        enterTransition = { fadeIn(tween(350)) },
-                        exitTransition = { fadeOut(tween(350)) },
-                        popEnterTransition = { fadeIn(tween(350)) },
-                        popExitTransition = { fadeOut(tween(350)) }
+                        enterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
+                        exitTransition = { fadeOut(tween(200, easing = LinearEasing)) },
+                        popEnterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
+                        popExitTransition = { fadeOut(tween(200, easing = LinearEasing)) }
                     ) { backStackEntry ->
                         val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
                         PhotoDetailScreen(

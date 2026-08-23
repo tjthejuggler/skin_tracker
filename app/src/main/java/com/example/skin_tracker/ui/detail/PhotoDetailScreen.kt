@@ -47,7 +47,7 @@ import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 import com.example.skin_tracker.ui.components.photoSharedElementModifier
-import java.io.File
+import com.example.skin_tracker.ui.components.rememberPhotoImageRequest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -191,7 +191,7 @@ private fun PhotoDetailView(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AsyncImage(
-            model = File(photo.uri),
+            model = rememberPhotoImageRequest(photo),
             contentDescription = "Photo detail",
             modifier = sharedElementModifier
                 .weight(1f)
