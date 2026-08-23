@@ -26,10 +26,22 @@ class PhotoDetailViewModel(
     private val photoRepository: PhotoRepository,
     private val comparisonRepository: ComparisonRepository,
     private val photoFileStore: PhotoFileStore,
-    private val requestAutoBackup: () -> Unit
+    private val requestAutoBackup: () -> Unit,
+    initialPhoto: Photo? = null
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(PhotoDetailState())
+    /**
+     * Seeded with [initialPhoto] (the photo already on screen in Compare) so the
+     * detail screen renders the shared-element target on its very first frame.
+     * [loadPhoto] replaces the seed with the full category list once Room returns.
+     */
+    private val _state = MutableStateFlow(
+        if (initialPhoto != null) {
+            PhotoDetailState(photo = initialPhoto, categoryPhotos = listOf(initialPhoto))
+        } else {
+            PhotoDetailState()
+        }
+    )
     val state: StateFlow<PhotoDetailState> = _state.asStateFlow()
 
     fun loadPhoto(photoId: Long) {
@@ -90,7 +102,10 @@ class PhotoDetailViewModel(
         )
     }
 
-    class Factory(private val application: Application) : ViewModelProvider.Factory {
+    class Factory(
+        private val application: Application,
+        private val initialPhoto: Photo? = null
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val app = application as SkinTrackerApp
@@ -99,7 +114,8 @@ class PhotoDetailViewModel(
                 container.photoRepository,
                 container.comparisonRepository,
                 container.photoFileStore,
-                app::requestAutoBackup
+                app::requestAutoBackup,
+                initialPhoto
             ) as T
         }
     }

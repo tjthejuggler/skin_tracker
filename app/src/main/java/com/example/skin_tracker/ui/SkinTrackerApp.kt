@@ -1,9 +1,6 @@
 package com.example.skin_tracker.ui
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -71,7 +68,12 @@ val bottomNavItems = listOf(
     BottomNavItem(Screen.Gallery, "Gallery", Icons.Default.PhotoLibrary)
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+// Simple, even cross-fade used for Compare <-> PhotoDetail navigation: both
+// screens fade over the same 300 ms so one dissolves into the other cleanly.
+private val CrossFadeIn = fadeIn(tween(300, easing = FastOutSlowInEasing))
+private val CrossFadeOut = fadeOut(tween(300, easing = FastOutSlowInEasing))
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkinTrackerApp() {
     val context = LocalContext.current
@@ -167,92 +169,86 @@ fun SkinTrackerApp() {
                 }
             }
         ) { innerPadding ->
-            SharedTransitionLayout {
-                NavHost(
-                    navController = navController,
-                    startDestination = startDestination!!,
-                    modifier = Modifier.padding(innerPadding)
+            NavHost(
+                navController = navController,
+                startDestination = startDestination!!,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(Screen.Chart.route) {
+                    ChartScreen(
+                        onPhotoClick = { photoId ->
+                            navController.navigate(Screen.PhotoDetail.createRoute(photoId))
+                        },
+                        playTrigger = playTrigger
+                    )
+                }
+                composable(
+                    route = Screen.Compare.route,
+                    enterTransition = { CrossFadeIn },
+                    exitTransition = { CrossFadeOut },
+                    popEnterTransition = { CrossFadeIn },
+                    popExitTransition = { CrossFadeOut }
                 ) {
-                    composable(Screen.Chart.route) {
-                        ChartScreen(
-                            onPhotoClick = { photoId ->
-                                navController.navigate(Screen.PhotoDetail.createRoute(photoId))
-                            },
-                            playTrigger = playTrigger
-                        )
-                    }
-                    composable(
-                        route = Screen.Compare.route,
-                        enterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
-                        exitTransition = { fadeOut(tween(200, easing = LinearEasing)) },
-                        popEnterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
-                        popExitTransition = { fadeOut(tween(200, easing = LinearEasing)) }
-                    ) {
-                        CompareScreen(
-                            onHistoryClick = {
-                                navController.navigate(Screen.History.route)
-                            },
-                            onPhotoDetail = { photoId ->
-                                navController.navigate(Screen.PhotoDetail.createRoute(photoId))
-                            },
-                            sharedTransitionScope = this@SharedTransitionLayout,
-                            animatedVisibilityScope = this
-                        )
-                    }
-                    composable(Screen.Capture.route) {
-                        CaptureScreen()
-                    }
-                    composable(Screen.Gallery.route) {
-                        GalleryScreen(
-                            onPhotoClick = { photoId ->
-                                navController.navigate(Screen.PhotoDetail.createRoute(photoId))
-                            }
-                        )
-                    }
-                    composable(Screen.History.route) {
-                        HistoryScreen(
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                    composable(Screen.Settings.route) {
-                        SettingsScreen(
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                    composable(Screen.Stats.route) {
-                        StatsScreen(
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                    composable(
-                        route = Screen.PhotoDetail.route,
-                        arguments = listOf(navArgument("photoId") { type = NavType.LongType }),
-                        enterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
-                        exitTransition = { fadeOut(tween(200, easing = LinearEasing)) },
-                        popEnterTransition = { fadeIn(tween(350, easing = FastOutSlowInEasing)) },
-                        popExitTransition = { fadeOut(tween(200, easing = LinearEasing)) }
-                    ) { backStackEntry ->
-                        val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
-                        PhotoDetailScreen(
-                            photoId = photoId,
-                            onBack = { navController.popBackStack() },
-                            onEditPhoto = { editId ->
-                                navController.navigate(Screen.EditPhoto.createRoute(editId))
-                            },
-                            sharedTransitionScope = this@SharedTransitionLayout,
-                            animatedVisibilityScope = this
-                        )
-                    }
-                    composable(
-                        route = Screen.EditPhoto.route,
-                        arguments = listOf(navArgument("photoId") { type = NavType.LongType })
-                    ) { backStackEntry ->
-                        val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
-                        EditPhotoScreen(
-                            photoId = photoId,
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
+                    CompareScreen(
+                        onHistoryClick = {
+                            navController.navigate(Screen.History.route)
+                        },
+                        onPhotoDetail = { photoId ->
+                            navController.navigate(Screen.PhotoDetail.createRoute(photoId))
+                        }
+                    )
+                }
+                composable(Screen.Capture.route) {
+                    CaptureScreen()
+                }
+                composable(Screen.Gallery.route) {
+                    GalleryScreen(
+                        onPhotoClick = { photoId ->
+                            navController.navigate(Screen.PhotoDetail.createRoute(photoId))
+                        }
+                    )
+                }
+                composable(Screen.History.route) {
+                    HistoryScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Settings.route) {
+                    SettingsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Stats.route) {
+                    StatsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Screen.PhotoDetail.route,
+                    arguments = listOf(navArgument("photoId") { type = NavType.LongType }),
+                    enterTransition = { CrossFadeIn },
+                    exitTransition = { CrossFadeOut },
+                    popEnterTransition = { CrossFadeIn },
+                    popExitTransition = { CrossFadeOut }
+                ) { backStackEntry ->
+                    val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
+                    PhotoDetailScreen(
+                        photoId = photoId,
+                        onBack = { navController.popBackStack() },
+                        onEditPhoto = { editId ->
+                            navController.navigate(Screen.EditPhoto.createRoute(editId))
+                        }
+                    )
+                }
+                composable(
+                    route = Screen.EditPhoto.route,
+                    arguments = listOf(navArgument("photoId") { type = NavType.LongType })
+                ) { backStackEntry ->
+                    val photoId = backStackEntry.arguments?.getLong("photoId") ?: return@composable
+                    EditPhotoScreen(
+                        photoId = photoId,
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
         }

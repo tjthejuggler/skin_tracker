@@ -1,8 +1,8 @@
 package com.example.skin_tracker.ui.detail
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,24 +44,31 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.skin_tracker.SkinTrackerApp
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
-import com.example.skin_tracker.ui.components.photoSharedElementModifier
 import com.example.skin_tracker.ui.components.rememberPhotoImageRequest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoDetailScreen(
     photoId: Long,
     onBack: () -> Unit,
     onEditPhoto: (Long) -> Unit,
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
-    viewModel: PhotoDetailViewModel = viewModel(factory = PhotoDetailViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
+    viewModel: PhotoDetailViewModel = viewModel(
+        factory = PhotoDetailViewModel.Factory(
+            LocalContext.current.applicationContext as android.app.Application,
+            // Seed from the handoff cache so the tapped photo renders on the
+            // very first frame of the transition instead of popping in after
+            // the Room query returns.
+            (LocalContext.current.applicationContext as SkinTrackerApp)
+                .container.photoHandoffCache.get(photoId)
+        )
+    )
 ) {
     val state by viewModel.state.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -109,10 +116,14 @@ fun PhotoDetailScreen(
                 pageCount = { state.categoryPhotos.size }
             )
 
-            // Sync pager when ViewModel updates currentIndex (e.g. after category change reload)
+            // Sync pager when ViewModel updates currentIndex — e.g. the seeded
+            // single-photo list being replaced by the full category list, or a
+            // reload after a category change. Snap instead of animate: the photo
+            // on screen is the same, so an animated scroll would show a visible
+            // slide out of nowhere mid-transition.
             LaunchedEffect(state.currentIndex) {
                 if (pagerState.currentPage != state.currentIndex) {
-                    pagerState.animateScrollToPage(state.currentIndex)
+                    pagerState.scrollToPage(state.currentIndex)
                 }
             }
 
@@ -128,23 +139,22 @@ fun PhotoDetailScreen(
                 PhotoDetailView(
                     photo = photo,
                     onDateChanged = { newDate -> viewModel.updateCapturedAt(newDate) },
-                    onCategoryChange = { newCategory -> viewModel.changeCategory(newCategory) },
-                    sharedElementModifier = photoSharedElementModifier(
-                        sharedTransitionScope,
-                        animatedVisibilityScope,
-                        photo.id
-                    )
+                    onCategoryChange = { newCategory -> viewModel.changeCategory(newCategory) }
                 )
             }
 
-            if (state.categoryPhotos.size > 1) {
+            // The counter appears only once the full list replaces the seed —
+            // fade it in gently instead of letting it pop mid-transition.
+            AnimatedVisibility(
+                visible = state.categoryPhotos.size > 1,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                enter = fadeIn() + expandVertically()
+            ) {
                 Text(
                     text = "${pagerState.currentPage + 1} of ${state.categoryPhotos.size}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .align(Alignment.CenterHorizontally)
+                    modifier = Modifier.padding(8.dp)
                 )
             }
         }
@@ -178,8 +188,7 @@ fun PhotoDetailScreen(
 private fun PhotoDetailView(
     photo: Photo,
     onDateChanged: (Long) -> Unit,
-    onCategoryChange: (Category) -> Unit,
-    sharedElementModifier: Modifier = Modifier
+    onCategoryChange: (Category) -> Unit
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showCategoryDialog by remember { mutableStateOf(false) }
@@ -193,7 +202,7 @@ private fun PhotoDetailView(
         AsyncImage(
             model = rememberPhotoImageRequest(photo),
             contentDescription = "Photo detail",
-            modifier = sharedElementModifier
+            modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentScale = ContentScale.Fit

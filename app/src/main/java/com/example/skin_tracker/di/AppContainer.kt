@@ -14,6 +14,7 @@ import com.example.skin_tracker.data.repo.NoteRepository
 import com.example.skin_tracker.data.repo.PhotoRepository
 import com.example.skin_tracker.data.storage.PhotoFileStore
 import com.example.skin_tracker.domain.model.Category
+import com.example.skin_tracker.domain.model.Photo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +61,15 @@ class AppContainer(val context: Context) {
     val debugPreferences by lazy { DebugPreferences(context) }
 
     val debugNoteRepository by lazy { DebugNoteRepository(context, debugPreferences) }
+    /**
+     * Handoff cache for photos currently displayed on screen, keyed by photo id.
+     * PhotoDetail reads it to render the tapped photo on its very first frame so
+     * the shared-element morph has a target immediately; the full category list
+     * from Room replaces the seed a few frames later. Populated by CompareViewModel
+     * whenever a pair is shown.
+     */
+    val photoHandoffCache = LruCache<Long, Photo>(8)
+
     /** Shared category selection synced between Compare and Chart screens. */
     private val _sharedCategory = MutableStateFlow(Category.FACE)
     val sharedCategory: StateFlow<Category> = _sharedCategory.asStateFlow()

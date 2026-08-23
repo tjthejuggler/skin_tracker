@@ -1,8 +1,5 @@
 package com.example.skin_tracker.ui.compare
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.skin_tracker.ui.components.SelectableChip
-import com.example.skin_tracker.ui.components.photoSharedElementModifier
+import com.example.skin_tracker.ui.components.SharedPhotoCorner
 import com.example.skin_tracker.ui.components.rememberPhotoImageRequest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,13 +39,10 @@ import coil.compose.AsyncImage
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.domain.model.Photo
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CompareScreen(
     onHistoryClick: () -> Unit = {},
     onPhotoDetail: (Long) -> Unit = {},
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     viewModel: CompareViewModel = viewModel(factory = CompareViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -126,11 +120,6 @@ fun CompareScreen(
                     label = "A",
                     onTap = { viewModel.pickWinner(winnerIsA = true) },
                     onDetailClick = { onPhotoDetail(state.photoA!!.id) },
-                    sharedElementModifier = photoSharedElementModifier(
-                        sharedTransitionScope,
-                        animatedVisibilityScope,
-                        state.photoA!!.id
-                    ),
                     modifier = Modifier.weight(1f)
                 )
 
@@ -139,11 +128,6 @@ fun CompareScreen(
                     label = "B",
                     onTap = { viewModel.pickWinner(winnerIsA = false) },
                     onDetailClick = { onPhotoDetail(state.photoB!!.id) },
-                    sharedElementModifier = photoSharedElementModifier(
-                        sharedTransitionScope,
-                        animatedVisibilityScope,
-                        state.photoB!!.id
-                    ),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -187,16 +171,15 @@ private fun ComparePhotoCard(
     label: String,
     onTap: () -> Unit,
     onDetailClick: () -> Unit = {},
-    sharedElementModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         AsyncImage(
             model = rememberPhotoImageRequest(photo),
             contentDescription = "Photo $label",
-            modifier = sharedElementModifier
+            modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(SharedPhotoCorner))
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )

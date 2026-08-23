@@ -66,6 +66,12 @@ class CompareViewModel(
         viewModelScope.launch {
             val photos = photoRepository.getByCategorySync(_state.value.category)
             val pair = PairPicker.pickPair(photos)
+            // Warm the handoff cache so PhotoDetail can render either photo on its
+            // first frame (shared-element morph target) when the user opens details.
+            pair?.let { (a, b) ->
+                appContainer.photoHandoffCache.put(a.id, a)
+                appContainer.photoHandoffCache.put(b.id, b)
+            }
             _state.value = _state.value.copy(
                 photoA = pair?.first,
                 photoB = pair?.second,
@@ -160,6 +166,10 @@ class CompareViewModel(
             }
             lastComparisonId = null
             lastPair = null
+
+            // Keep the handoff cache warm for the restored pair as well.
+            appContainer.photoHandoffCache.put(pair.first.id, pair.first)
+            appContainer.photoHandoffCache.put(pair.second.id, pair.second)
 
             _state.value = _state.value.copy(
                 photoA = pair.first,
