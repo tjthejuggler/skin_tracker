@@ -51,6 +51,19 @@ interface ComparisonDao {
     @Query("SELECT COUNT(*) FROM comparisons WHERE category = :category")
     suspend fun totalCountByCategory(category: String): Int
 
+    @Query("SELECT COALESCE(SUM(durationMs), 0) FROM comparisons")
+    suspend fun totalDuration(): Long
+
+    @Query("SELECT COALESCE(SUM(durationMs), 0) FROM comparisons WHERE category = :category")
+    suspend fun totalDurationByCategory(category: String): Long
+
+    /** Comparisons that have a recorded decision time (excludes legacy rows with durationMs = 0). */
+    @Query("SELECT COUNT(*) FROM comparisons WHERE durationMs > 0")
+    suspend fun trackedCount(): Int
+
+    @Query("SELECT COUNT(*) FROM comparisons WHERE category = :category AND durationMs > 0")
+    suspend fun trackedCountByCategory(category: String): Int
+
     @Query("SELECT comparedAt FROM comparisons ORDER BY comparedAt ASC")
     suspend fun getAllComparedAtAsc(): List<Long>
 

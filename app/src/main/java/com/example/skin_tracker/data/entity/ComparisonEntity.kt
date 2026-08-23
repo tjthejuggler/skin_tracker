@@ -10,6 +10,8 @@ data class ComparisonEntity(
     val loserPhotoId: Long,
     val category: String,
     val comparedAt: Long,
+    /** How long the user looked at the pair before deciding (ms). 0 for legacy rows. */
+    val durationMs: Long = 0L,
     val winnerRatingBefore: Double,
     val loserRatingBefore: Double,
     val winnerRatingAfter: Double,

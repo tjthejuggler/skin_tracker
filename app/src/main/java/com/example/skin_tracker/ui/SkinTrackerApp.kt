@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -54,6 +55,7 @@ import com.example.skin_tracker.ui.edit.EditPhotoScreen
 import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.history.HistoryScreen
 import com.example.skin_tracker.ui.settings.SettingsScreen
+import com.example.skin_tracker.ui.stats.StatsScreen
 import java.util.Calendar
 
 data class BottomNavItem(
@@ -124,6 +126,12 @@ fun SkinTrackerApp() {
                                     contentDescription = "Play face animation"
                                 )
                             }
+                        }
+                        IconButton(onClick = { navController.navigate(Screen.Stats.route) }) {
+                            Icon(
+                                imageVector = Icons.Default.BarChart,
+                                contentDescription = "Statistics"
+                            )
                         }
                         IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
                             Icon(
@@ -208,6 +216,11 @@ fun SkinTrackerApp() {
                     }
                     composable(Screen.Settings.route) {
                         SettingsScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable(Screen.Stats.route) {
+                        StatsScreen(
                             onBack = { navController.popBackStack() }
                         )
                     }

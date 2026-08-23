@@ -36,7 +36,8 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
         winnerRatingBefore: Double,
         loserRatingBefore: Double,
         winnerRatingAfter: Double,
-        loserRatingAfter: Double
+        loserRatingAfter: Double,
+        durationMs: Long = 0L
     ): Long {
         return comparisonDao.insert(
             ComparisonEntity(
@@ -44,6 +45,7 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
                 loserPhotoId = loserPhotoId,
                 category = category.name,
                 comparedAt = comparedAt,
+                durationMs = durationMs,
                 winnerRatingBefore = winnerRatingBefore,
                 loserRatingBefore = loserRatingBefore,
                 winnerRatingAfter = winnerRatingAfter,
@@ -78,6 +80,21 @@ class ComparisonRepository(private val comparisonDao: ComparisonDao) {
 
     suspend fun totalCountByCategory(category: Category): Int =
         comparisonDao.totalCountByCategory(category.name)
+
+    /** Total time (ms) spent deciding comparisons, across all categories. */
+    suspend fun totalDuration(): Long =
+        comparisonDao.totalDuration()
+
+    /** Total time (ms) spent deciding comparisons in one category (face/body differ). */
+    suspend fun totalDurationByCategory(category: Category): Long =
+        comparisonDao.totalDurationByCategory(category.name)
+
+    /** Count of comparisons with a recorded decision time (denominator for the time-per-comparison rate). */
+    suspend fun trackedCount(): Int =
+        comparisonDao.trackedCount()
+
+    suspend fun trackedCountByCategory(category: Category): Int =
+        comparisonDao.trackedCountByCategory(category.name)
 
     suspend fun getAllComparedAtAsc(): List<Long> =
         comparisonDao.getAllComparedAtAsc()

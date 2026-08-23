@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
 import com.example.skin_tracker.domain.model.HabitEntry
-import com.example.skin_tracker.domain.model.Photo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -130,12 +129,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Stats ─────────────────────────────────────────────────────
-            StatsCard(
-                stats = state.stats,
-                onRefresh = { viewModel.loadStats() }
-            )
-
             TailAppIntegrationCard(
                 habitList = state.habitList,
                 isLoading = state.isLoadingHabits,
@@ -182,119 +175,6 @@ fun SettingsScreen(
     }
 }
 
-// ── Stats Card ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun StatsCard(
-    stats: AppStats,
-    onRefresh: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("📊 Statistics", style = MaterialTheme.typography.titleMedium)
-                if (stats.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    TextButton(onClick = onRefresh) {
-                        Text("Refresh", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-
-            if (!stats.isLoading) {
-                HorizontalDivider()
-
-                // Photos section
-                StatsSectionTitle("Photos")
-                StatsRow("Total photos", "${stats.totalPhotos}")
-                StatsRow("Face photos", "${stats.facePhotos}")
-                StatsRow("Body photos", "${stats.bodyPhotos}")
-                StatsRow("This week", "${stats.photosThisWeek}")
-                StatsRow("This month", "${stats.photosThisMonth}")
-
-                HorizontalDivider()
-
-                // Comparisons section
-                StatsSectionTitle("Comparisons")
-                StatsRow("Total comparisons", "${stats.totalComparisons}")
-                StatsRow("Face comparisons", "${stats.faceComparisons}")
-                StatsRow("Body comparisons", "${stats.bodyComparisons}")
-                StatsRow("This week", "${stats.comparisonsThisWeek}")
-                StatsRow("This month", "${stats.comparisonsThisMonth}")
-                if (stats.avgComparisonsPerDay > 0) {
-                    StatsRow("Avg / active day", String.format("%.1f", stats.avgComparisonsPerDay))
-                }
-
-                HorizontalDivider()
-
-                // Top rated section
-                StatsSectionTitle("Top Rated — All Time")
-                stats.topRatedPhoto?.let { photo ->
-                    TopRatedRow("Overall best", photo)
-                } ?: StatsRow("Overall best", "No photos yet")
-
-                stats.topRatedFacePhoto?.let { photo ->
-                    TopRatedRow("Best face", photo)
-                } ?: StatsRow("Best face", "No face photos yet")
-
-                stats.topRatedBodyPhoto?.let { photo ->
-                    TopRatedRow("Best body", photo)
-                } ?: StatsRow("Best body", "No body photos yet")
-
-                HorizontalDivider()
-
-                // Top rated by period
-                StatsSectionTitle("Top Rated — This Week")
-                stats.topRatedThisWeek?.let { photo ->
-                    TopRatedRow("Best this week", photo)
-                } ?: StatsRow("Best this week", "No photos yet")
-
-                StatsSectionTitle("Top Rated — This Month")
-                stats.topRatedThisMonth?.let { photo ->
-                    TopRatedRow("Best this month", photo)
-                } ?: StatsRow("Best this month", "No photos yet")
-
-                StatsSectionTitle("Top Rated — This Year")
-                stats.topRatedThisYear?.let { photo ->
-                    TopRatedRow("Best this year", photo)
-                } ?: StatsRow("Best this year", "No photos yet")
-
-                HorizontalDivider()
-
-                // Streaks section
-                StatsSectionTitle("Streaks")
-                StatsRow("Current streak", "${stats.currentStreakDays} day${if (stats.currentStreakDays != 1) "s" else ""}")
-                StatsRow("Longest streak", "${stats.longestStreakDays} day${if (stats.longestStreakDays != 1) "s" else ""}")
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatsSectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary
-    )
-}
-
 @Composable
 private fun StatsRow(label: String, value: String) {
     Row(
@@ -312,36 +192,6 @@ private fun StatsRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium
         )
-    }
-}
-
-@Composable
-private fun TopRatedRow(label: String, photo: Photo) {
-    val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-    val dateStr = sdf.format(Date(photo.capturedAt))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = String.format("%.0f pts", photo.rating),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = dateStr,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

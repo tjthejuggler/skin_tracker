@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
     data object Gallery : Screen("gallery")
     data object History : Screen("history")
     data object Settings : Screen("settings")
+    data object Stats : Screen("stats")
     data object PhotoDetail : Screen("photo/{photoId}") {
         fun createRoute(photoId: Long) = "photo/$photoId"
     }

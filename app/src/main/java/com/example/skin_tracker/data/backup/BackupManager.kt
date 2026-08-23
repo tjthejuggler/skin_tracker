@@ -294,6 +294,7 @@ class BackupManager(
                 put("loserPhotoId", c.loserPhotoId)
                 put("category", c.category)
                 put("comparedAt", c.comparedAt)
+                put("durationMs", c.durationMs)
                 put("winnerRatingBefore", c.winnerRatingBefore)
                 put("loserRatingBefore", c.loserRatingBefore)
                 put("winnerRatingAfter", c.winnerRatingAfter)
@@ -356,6 +357,7 @@ class BackupManager(
                     loserPhotoId = o.getLong("loserPhotoId"),
                     category = o.getString("category"),
                     comparedAt = o.getLong("comparedAt"),
+                    durationMs = o.optLong("durationMs", 0L),
                     winnerRatingBefore = o.getDouble("winnerRatingBefore"),
                     loserRatingBefore = o.getDouble("loserRatingBefore"),
                     winnerRatingAfter = o.getDouble("winnerRatingAfter"),

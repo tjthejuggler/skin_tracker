@@ -9,18 +9,12 @@ import com.example.skin_tracker.data.backup.BackupManager
 import com.example.skin_tracker.data.backup.BackupPreferences
 import com.example.skin_tracker.data.debug.DebugPreferences
 import com.example.skin_tracker.data.ipc.HabitIntegrationRepository
-import com.example.skin_tracker.data.repo.ComparisonRepository
-import com.example.skin_tracker.data.repo.PhotoRepository
-import com.example.skin_tracker.domain.model.Category
-import com.example.skin_tracker.domain.model.Photo
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
 
 data class HabitSlotSelection(
     val habitId: String = "",
@@ -29,33 +23,6 @@ data class HabitSlotSelection(
     val isSet: Boolean get() = habitId.isNotBlank()
     val displayName: String get() = habitName.ifBlank { habitId }
 }
-
-data class AppStats(
-    val totalComparisons: Int = 0,
-    val faceComparisons: Int = 0,
-    val bodyComparisons: Int = 0,
-    val totalPhotos: Int = 0,
-    val facePhotos: Int = 0,
-    val bodyPhotos: Int = 0,
-    val topRatedPhoto: Photo? = null,
-    val topRatedFacePhoto: Photo? = null,
-    val topRatedBodyPhoto: Photo? = null,
-    // Top-rated per time window
-    val topRatedThisWeek: Photo? = null,
-    val topRatedThisMonth: Photo? = null,
-    val topRatedThisYear: Photo? = null,
-    // Activity counts per time window
-    val photosThisWeek: Int = 0,
-    val photosThisMonth: Int = 0,
-    val comparisonsThisWeek: Int = 0,
-    val comparisonsThisMonth: Int = 0,
-    // Streaks
-    val longestStreakDays: Int = 0,
-    val currentStreakDays: Int = 0,
-    // Averages
-    val avgComparisonsPerDay: Double = 0.0,
-    val isLoading: Boolean = true
-)
 
 data class SettingsUiState(
     val habitList: List<com.example.skin_tracker.domain.model.HabitEntry> = emptyList(),
@@ -74,9 +41,7 @@ data class SettingsUiState(
     val lastBackupAt: Long = 0L,
     val lastBackupPhotoCount: Int = 0,
     val backupInProgress: Boolean = false,
-    val restoreInProgress: Boolean = false,
-    // ── Stats ─────────────────────────────────────────────────────────────
-    val stats: AppStats = AppStats()
+    val restoreInProgress: Boolean = false
 ) {
     val backupConfigured: Boolean get() = backupDirUri.isNotBlank()
 }
@@ -84,8 +49,6 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val habitRepo: HabitIntegrationRepository,
     private val debugPrefs: DebugPreferences,
-    private val photoRepository: PhotoRepository,
-    private val comparisonRepository: ComparisonRepository,
     private val backupPrefs: BackupPreferences,
     private val backupManager: BackupManager
 ) : ViewModel() {
@@ -118,7 +81,6 @@ class SettingsViewModel(
                 )
             }
         }
-        loadStats()
     }
 
     fun loadHabits() {
@@ -227,110 +189,8 @@ class SettingsViewModel(
             }
             _uiState.value = _uiState.value.copy(restoreInProgress = false)
             _messages.emit(msg)
-            loadStats()
         }
     }
-
-    // ── Stats ──────────────────────────────────────────────────────────────
-
-    fun loadStats() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(stats = _uiState.value.stats.copy(isLoading = true))
-
-            val now = System.currentTimeMillis()
-            val weekAgo = now - 7L * 24 * 60 * 60 * 1000
-            val monthAgo = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }.timeInMillis
-            val yearAgo = Calendar.getInstance().apply { add(Calendar.YEAR, -1) }.timeInMillis
-
-            val totalComparisons = comparisonRepository.totalCount()
-            val faceComparisons = comparisonRepository.totalCountByCategory(Category.FACE)
-            val bodyComparisons = comparisonRepository.totalCountByCategory(Category.BODY)
-
-            val facePhotos = photoRepository.countByCategory(Category.FACE)
-            val bodyPhotos = photoRepository.countByCategory(Category.BODY)
-
-            val topRated = photoRepository.getTopRated()
-            val topRatedFace = photoRepository.getTopRatedByCategory(Category.FACE)
-            val topRatedBody = photoRepository.getTopRatedByCategory(Category.BODY)
-
-            val topRatedWeek = photoRepository.getTopRatedSince(weekAgo)
-            val topRatedMonth = photoRepository.getTopRatedSince(monthAgo)
-            val topRatedYear = photoRepository.getTopRatedSince(yearAgo)
-
-            val photosThisWeek = photoRepository.countSince(weekAgo)
-            val photosThisMonth = photoRepository.countSince(monthAgo)
-            val comparisonsThisWeek = comparisonRepository.countSince(weekAgo)
-            val comparisonsThisMonth = comparisonRepository.countSince(monthAgo)
-
-            val capturedAtList = photoRepository.getAllCapturedAtAsc()
-            val (longestStreak, currentStreak) = computeStreaks(capturedAtList)
-
-            // Average comparisons per active day (days that have at least one comparison)
-            val comparedAtList = comparisonRepository.getAllComparedAtAsc()
-            val avgComparisonsPerDay = if (comparedAtList.isNotEmpty()) {
-                val activeDays = comparedAtList.map { toDayEpoch(it) }.distinct().size
-                if (activeDays > 0) totalComparisons.toDouble() / activeDays else 0.0
-            } else 0.0
-
-            _uiState.value = _uiState.value.copy(
-                stats = AppStats(
-                    totalComparisons = totalComparisons,
-                    faceComparisons = faceComparisons,
-                    bodyComparisons = bodyComparisons,
-                    totalPhotos = facePhotos + bodyPhotos,
-                    facePhotos = facePhotos,
-                    bodyPhotos = bodyPhotos,
-                    topRatedPhoto = topRated,
-                    topRatedFacePhoto = topRatedFace,
-                    topRatedBodyPhoto = topRatedBody,
-                    topRatedThisWeek = topRatedWeek,
-                    topRatedThisMonth = topRatedMonth,
-                    topRatedThisYear = topRatedYear,
-                    photosThisWeek = photosThisWeek,
-                    photosThisMonth = photosThisMonth,
-                    comparisonsThisWeek = comparisonsThisWeek,
-                    comparisonsThisMonth = comparisonsThisMonth,
-                    longestStreakDays = longestStreak,
-                    currentStreakDays = currentStreak,
-                    avgComparisonsPerDay = avgComparisonsPerDay,
-                    isLoading = false
-                )
-            )
-        }
-    }
-
-    /**
-     * Computes longest and current consecutive-day streaks from a sorted list of timestamps.
-     * A "day" is a calendar date in the device's local timezone.
-     */
-    private fun computeStreaks(capturedAtMillis: List<Long>): Pair<Int, Int> {
-        if (capturedAtMillis.isEmpty()) return Pair(0, 0)
-
-        // Deduplicate to unique calendar days
-        val days = capturedAtMillis.map { toDayEpoch(it) }.distinct().sorted()
-
-        var longest = 1
-        var current = 1
-        for (i in 1 until days.size) {
-            if (days[i] - days[i - 1] == 1L) {
-                current++
-                if (current > longest) longest = current
-            } else {
-                current = 1
-            }
-        }
-
-        // Check if the streak is still active (last day is today or yesterday)
-        val todayEpoch = toDayEpoch(System.currentTimeMillis())
-        val lastDayEpoch = days.last()
-        val activeStreak = if (todayEpoch - lastDayEpoch <= 1L) current else 0
-
-        return Pair(longest, activeStreak)
-    }
-
-    /** Returns the number of days since epoch (UTC midnight) for a given timestamp. */
-    private fun toDayEpoch(millis: Long): Long =
-        TimeUnit.MILLISECONDS.toDays(millis)
 
     private fun buildInitialState(): SettingsUiState {
         fun selection(slot: HabitIntegrationRepository.Slot) = HabitSlotSelection(
@@ -357,8 +217,6 @@ class SettingsViewModel(
             return SettingsViewModel(
                 container.habitIntegrationRepository,
                 container.debugPreferences,
-                container.photoRepository,
-                container.comparisonRepository,
                 container.backupPreferences,
                 container.backupManager
             ) as T

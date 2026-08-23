@@ -42,6 +42,14 @@ class CompareViewModel(
     private var lastComparisonId: Long? = null
     private var lastPair: Pair<Photo, Photo>? = null
 
+    /** Wall-clock time (ms) of when the current pair was presented; measures per-comparison decision time. */
+    private var pairShownAt: Long = 0L
+
+    companion object {
+        /** Cap so a backgrounded/abandoned session doesn't inflate the time-per-comparison stats. */
+        private const val MAX_DECISION_MS = 10L * 60 * 1000
+    }
+
     init {
         loadPair()
         loadComparisonCount()
@@ -65,6 +73,8 @@ class CompareViewModel(
                 canUndo = comparisonRepository.getLatestByCategory(_state.value.category) != null,
                 isLoading = false
             )
+            // Start (or reset) the decision clock for the freshly presented pair.
+            pairShownAt = if (pair != null) System.currentTimeMillis() else 0L
         }
     }
 
@@ -75,6 +85,12 @@ class CompareViewModel(
 
         val winner = if (winnerIsA) a else b
         val loser = if (winnerIsA) b else a
+
+        // Stop the clock for this decision synchronously, before any async work.
+        val decisionMs = if (pairShownAt > 0L) {
+            (System.currentTimeMillis() - pairShownAt).coerceIn(0L, MAX_DECISION_MS)
+        } else 0L
+        pairShownAt = 0L
 
         val (updatedWinner, updatedLoser) = Elo.applyComparison(winner, loser)
 
@@ -90,7 +106,8 @@ class CompareViewModel(
                 winnerRatingBefore = winner.rating,
                 loserRatingBefore = loser.rating,
                 winnerRatingAfter = updatedWinner.rating,
-                loserRatingAfter = updatedLoser.rating
+                loserRatingAfter = updatedLoser.rating,
+                durationMs = decisionMs
             )
             lastComparisonId = comparisonId
             lastPair = a to b
@@ -149,6 +166,8 @@ class CompareViewModel(
                 photoB = pair.second,
                 canUndo = comparisonRepository.getLatestByCategory(category) != null
             )
+            // The user re-decides this pair from scratch — restart the decision clock.
+            pairShownAt = System.currentTimeMillis()
             loadComparisonCount()
         }
     }
