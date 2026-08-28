@@ -25,7 +25,11 @@ data class CompareState(
     val comparisonsToday: Int = 0,
     val totalPhotos: Int = 0,
     val canUndo: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    /** Remaining focus comparisons, or null when no focus session is active. */
+    val focusRemaining: Int? = null,
+    /** Image zoom factor applied to both compared photos. */
+    val zoom: Float = 1f
 )
 
 class CompareViewModel(
@@ -48,11 +52,40 @@ class CompareViewModel(
     companion object {
         /** Cap so a backgrounded/abandoned session doesn't inflate the time-per-comparison stats. */
         private const val MAX_DECISION_MS = 10L * 60 * 1000
+        private const val ZOOM_STEP = 0.05f
+        private const val ZOOM_MIN = 0.5f
+        private const val ZOOM_MAX = 3f
     }
 
+    /** Persists the compare zoom across comparisons and app runs. */
+    private val zoomPrefs = appContainer.context
+        .getSharedPreferences("compare_prefs", android.content.Context.MODE_PRIVATE)
+
     init {
+        _state.value = _state.value.copy(zoom = zoomPrefs.getFloat("zoom", 1f))
+        // React to category changes made from the TopAppBar toggle.
+        viewModelScope.launch {
+            appContainer.sharedCategory.collect { category ->
+                if (category != _state.value.category) {
+                    _state.value = _state.value.copy(category = category)
+                    loadPair()
+                }
+            }
+        }
         loadPair()
         loadComparisonCount()
+    }
+
+    /** Zooms in by one 5% step (persisted). */
+    fun zoomIn() = adjustZoom(ZOOM_STEP)
+
+    /** Zooms out by one 5% step (persisted). */
+    fun zoomOut() = adjustZoom(-ZOOM_STEP)
+
+    private fun adjustZoom(delta: Float) {
+        val newZoom = (_state.value.zoom + delta).coerceIn(ZOOM_MIN, ZOOM_MAX)
+        _state.value = _state.value.copy(zoom = newZoom)
+        zoomPrefs.edit().putFloat("zoom", newZoom).apply()
     }
 
     fun setCategory(category: Category) {
@@ -65,7 +98,24 @@ class CompareViewModel(
         _state.value = _state.value.copy(isLoading = true)
         viewModelScope.launch {
             val photos = photoRepository.getByCategorySync(_state.value.category)
-            val pair = PairPicker.pickPair(photos)
+
+            // Focus session: pin the focus photo against a uniformly random
+            // opponent so the user can correct a mis-scored photo directly.
+            val session = appContainer.focusCompareSession.value
+            val pair = if (session != null && session.remaining > 0) {
+                val focus = photos.firstOrNull { it.id == session.photoId }
+                if (focus == null) {
+                    // Focus photo no longer exists in this category — drop session
+                    appContainer.focusCompareSession.value = null
+                    PairPicker.pickPair(photos)
+                } else {
+                    val opponents = photos.filter { it.id != focus.id }
+                    val opponent = opponents.randomOrNull()
+                    if (opponent == null) null else focus to opponent
+                }
+            } else {
+                PairPicker.pickPair(photos)
+            }
             // Warm the handoff cache so PhotoDetail can render either photo on its
             // first frame (shared-element morph target) when the user opens details.
             pair?.let { (a, b) ->
@@ -77,7 +127,8 @@ class CompareViewModel(
                 photoB = pair?.second,
                 totalPhotos = photos.size,
                 canUndo = comparisonRepository.getLatestByCategory(_state.value.category) != null,
-                isLoading = false
+                isLoading = false,
+                focusRemaining = appContainer.focusCompareSession.value?.remaining
             )
             // Start (or reset) the decision clock for the freshly presented pair.
             pairShownAt = if (pair != null) System.currentTimeMillis() else 0L
@@ -99,6 +150,12 @@ class CompareViewModel(
         pairShownAt = 0L
 
         val (updatedWinner, updatedLoser) = Elo.applyComparison(winner, loser)
+
+        // Consume one focus-comparison credit, if a session is active.
+        appContainer.focusCompareSession.value?.let { session ->
+            session.remaining -= 1
+            if (session.remaining <= 0) appContainer.focusCompareSession.value = null
+        }
 
         viewModelScope.launch {
             photoRepository.updateRating(updatedWinner)

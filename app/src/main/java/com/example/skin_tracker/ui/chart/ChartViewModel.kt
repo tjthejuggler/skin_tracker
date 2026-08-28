@@ -1,6 +1,9 @@
 package com.example.skin_tracker.ui.chart
 
 import android.app.Application
+import android.graphics.BitmapFactory
+import java.io.File
+import java.io.FileOutputStream
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -38,6 +41,14 @@ enum class TimeRange(val label: String, val days: Int?, val movingAverageWindow:
     SIX_MONTHS("6M", 180, 21),
     ONE_YEAR("1Y", 365, 30),
     ALL("All", null, 60)
+}
+
+/** How the face animation orders the photos when playing. */
+enum class PlayOrder(val label: String) {
+    TIME_ASC("Time ↑"),
+    TIME_DESC("Time ↓"),
+    QUALITY_ASC("Quality ↑"),
+    QUALITY_DESC("Quality ↓")
 }
 
 /** A single frame in the face animation. */
@@ -142,12 +153,18 @@ class ChartViewModel(
 
     /**
      * Prepares and starts the face animation. Loads all current face photos,
-     * normalises each one via [FaceNormalizer], then plays them in sequence.
+     * normalises each one via [FaceNormalizer], then plays them in sequence
+     * ordered by [order] (time or quality, ascending or descending).
      */
-    fun startAnimation() {
+    fun startAnimation(order: PlayOrder = PlayOrder.TIME_ASC) {
         if (_animationState.value.isPreparing || _animationState.value.isPlaying) return
 
-        val photos = state.value.photos
+        val photos = when (order) {
+            PlayOrder.TIME_ASC -> state.value.photos.sortedBy { it.capturedAt }
+            PlayOrder.TIME_DESC -> state.value.photos.sortedByDescending { it.capturedAt }
+            PlayOrder.QUALITY_ASC -> state.value.photos.sortedBy { it.rating }
+            PlayOrder.QUALITY_DESC -> state.value.photos.sortedByDescending { it.rating }
+        }
         if (photos.isEmpty()) return
 
         animationJob?.cancel()
@@ -163,9 +180,18 @@ class ChartViewModel(
             val dateFmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
             val frames = mutableListOf<FaceAnimationFrame>()
 
+            val diskDir = appContainer.faceDiskCacheDir
             for (photo in photos) {
-                // Check cache first — skip re-normalisation on subsequent plays
+                // Memory cache → disk cache → full re-normalisation.
+                // The disk copy (JPEG, 512×512) decodes in a few ms, so
+                // replaying the animation is effectively instant even after
+                // process death or memory-cache eviction.
+                val diskFile = File(diskDir, File(photo.uri).name + ".jpg")
                 var bitmap = cache.get(photo.uri)
+                if (bitmap == null && diskFile.exists()) {
+                    bitmap = BitmapFactory.decodeFile(diskFile.absolutePath)
+                    if (bitmap != null) cache.put(photo.uri, bitmap)
+                }
                 if (bitmap == null) {
                     bitmap = try {
                         FaceNormalizer.normalizeFromFile(photo.uri)
@@ -174,6 +200,11 @@ class ChartViewModel(
                     }
                     if (bitmap != null) {
                         cache.put(photo.uri, bitmap)
+                        try {
+                            FileOutputStream(diskFile).use { out ->
+                                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                            }
+                        } catch (_: Exception) { /* disk cache is best-effort */ }
                     }
                 }
                 frames.add(

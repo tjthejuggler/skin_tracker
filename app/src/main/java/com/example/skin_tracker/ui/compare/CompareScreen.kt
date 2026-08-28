@@ -22,7 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.example.skin_tracker.ui.components.SelectableChip
 import com.example.skin_tracker.ui.components.SharedPhotoCorner
 import com.example.skin_tracker.ui.components.rememberPhotoImageRequest
 import androidx.compose.runtime.Composable
@@ -31,6 +30,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.roundToInt
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -50,24 +51,48 @@ fun CompareScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(8.dp)
     ) {
-        // Top row: category tabs + history button
+        // Top control row: undo, skip, zoom controls, history
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Category.entries.forEach { cat ->
-                    SelectableChip(
-                        label = cat.label,
-                        selected = cat == state.category,
-                        onClick = { viewModel.setCategory(cat) },
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                }
+            IconButton(
+                onClick = { viewModel.undoLastComparison() },
+                enabled = state.canUndo
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo last comparison",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+
+            IconButton(onClick = { viewModel.skip() }) {
+                Icon(
+                    Icons.Default.SkipNext,
+                    contentDescription = "Skip this pair",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Zoom controls: − [100%] +
+            TextButton(
+                onClick = { viewModel.zoomOut() },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)
+            ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+            Text(
+                text = "${(state.zoom * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = { viewModel.zoomIn() },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)
+            ) { Text("+", style = MaterialTheme.typography.titleLarge) }
 
             IconButton(onClick = onHistoryClick) {
                 Icon(
@@ -80,13 +105,27 @@ fun CompareScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Stats
-        Text(
-            text = "Comparisons today: ${state.comparisonsToday}  •  ${state.totalPhotos} photos",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // Stats (+ focus-mode counter on the same line when active)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Comparisons today: ${state.comparisonsToday}  •  ${state.totalPhotos} photos",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            state.focusRemaining?.let { remaining ->
+                Text(
+                    text = "🎯 ${15 - remaining}/15",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -108,19 +147,20 @@ fun CompareScreen(
                 }
             }
         } else {
-            // Two photos stacked vertically
+            // Two photos stacked vertically — undo/skip flank the bottom photo
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 ComparePhotoCard(
                     photo = state.photoA!!,
                     label = "A",
                     onTap = { viewModel.pickWinner(winnerIsA = true) },
                     onDetailClick = { onPhotoDetail(state.photoA!!.id) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    zoom = state.zoom
                 )
 
                 ComparePhotoCard(
@@ -128,38 +168,9 @@ fun CompareScreen(
                     label = "B",
                     onTap = { viewModel.pickWinner(winnerIsA = false) },
                     onDetailClick = { onPhotoDetail(state.photoB!!.id) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    zoom = state.zoom
                 )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                "Tap the photo where your skin looks better",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = { viewModel.undoLastComparison() },
-                    enabled = state.canUndo
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Undo")
-                }
-
-                TextButton(onClick = { viewModel.skip() }) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Skip")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Skip this pair")
-                }
             }
         }
     }
@@ -171,15 +182,19 @@ private fun ComparePhotoCard(
     label: String,
     onTap: () -> Unit,
     onDetailClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    zoom: Float = 1f
 ) {
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(SharedPhotoCorner))) {
         AsyncImage(
             model = rememberPhotoImageRequest(photo),
             contentDescription = "Photo $label",
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(SharedPhotoCorner))
+                .graphicsLayer {
+                    scaleX = zoom
+                    scaleY = zoom
+                }
                 .clickable { onTap() },
             contentScale = ContentScale.Fit
         )

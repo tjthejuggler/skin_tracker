@@ -4,8 +4,13 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.BarChart
@@ -15,6 +20,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
@@ -29,10 +35,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -45,12 +57,14 @@ import com.example.skin_tracker.SkinTrackerApp
 import com.example.skin_tracker.domain.model.Category
 import com.example.skin_tracker.ui.capture.CaptureScreen
 import com.example.skin_tracker.ui.chart.ChartScreen
+import com.example.skin_tracker.ui.chart.PlayOrder
 import com.example.skin_tracker.ui.compare.CompareScreen
 import com.example.skin_tracker.ui.debug.DebugBubbleOverlay
 import com.example.skin_tracker.ui.detail.PhotoDetailScreen
 import com.example.skin_tracker.ui.edit.EditPhotoScreen
 import com.example.skin_tracker.ui.gallery.GalleryScreen
 import com.example.skin_tracker.ui.history.HistoryScreen
+import com.example.skin_tracker.ui.components.SelectableChip
 import com.example.skin_tracker.ui.settings.SettingsScreen
 import com.example.skin_tracker.ui.stats.StatsScreen
 import java.util.Calendar
@@ -112,6 +126,10 @@ fun SkinTrackerApp() {
     // Play button trigger — incremented each time the user taps play in the TopAppBar.
     // ChartScreen observes this via LaunchedEffect.
     var playTrigger by remember { mutableIntStateOf(0) }
+    // Ordering used when playing the face animation (time/quality × asc/desc).
+    // Long-pressing the play button opens a popup to change it.
+    var playOrder by rememberSaveable { mutableStateOf(PlayOrder.TIME_ASC) }
+    var showPlayOrderMenu by remember { mutableStateOf(false) }
     val sharedCategory by container.sharedCategory.collectAsState()
     val showPlayButton = currentRoute == Screen.Chart.route && sharedCategory == Category.FACE
 
@@ -121,12 +139,76 @@ fun SkinTrackerApp() {
                 TopAppBar(
                     title = { Text("Skin Tracker") },
                     actions = {
-                        if (showPlayButton) {
-                            IconButton(onClick = { playTrigger++ }) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play face animation"
+                        // Face/Body toggle lives in the TopAppBar on Compare
+                        if (currentRoute == Screen.Compare.route) {
+                            Category.entries.forEach { cat ->
+                                SelectableChip(
+                                    label = cat.label,
+                                    selected = cat == sharedCategory,
+                                    onClick = { container.setSharedCategory(cat) },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 10.dp, vertical = 4.dp
+                                    )
                                 )
+                                if (cat != Category.entries.last()) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                            }
+                        }
+                        if (showPlayButton) {
+                            // Play button: tap plays, long-press opens the ordering popup.
+                            // A small badge under the icon shows the active ordering.
+                            Box {
+                                IconButton(onClick = {}) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Play face animation (${playOrder.label}, long-press to change)"
+                                    )
+                                }
+                                // Transparent gesture catcher over the button:
+                                // tap plays, long-press opens the ordering popup.
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = { playTrigger++ },
+                                                onLongPress = { showPlayOrderMenu = true }
+                                            )
+                                        }
+                                )
+                                Text(
+                                    text = playOrder.label,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 5.dp)
+                                )
+                                DropdownMenu(
+                                    expanded = showPlayOrderMenu,
+                                    onDismissRequest = { showPlayOrderMenu = false }
+                                ) {
+                                    Text(
+                                        "Play order",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                    PlayOrder.entries.forEach { order ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(if (order == playOrder) "✓ ${order.label}" else order.label)
+                                            },
+                                            onClick = {
+                                                playOrder = order
+                                                showPlayOrderMenu = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                         IconButton(onClick = { navController.navigate(Screen.Stats.route) }) {
@@ -179,7 +261,20 @@ fun SkinTrackerApp() {
                         onPhotoClick = { photoId ->
                             navController.navigate(Screen.PhotoDetail.createRoute(photoId))
                         },
-                        playTrigger = playTrigger
+                        onCompareClick = { photoId ->
+                            container.startFocusCompare(photoId)
+                            // Same options as the bottom bar so we don't push a
+                            // duplicate Compare entry on top of the existing one.
+                            navController.navigate(Screen.Compare.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        playTrigger = playTrigger,
+                        playOrder = playOrder
                     )
                 }
                 composable(

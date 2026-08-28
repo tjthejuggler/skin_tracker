@@ -38,6 +38,14 @@ class AppContainer(val context: Context) {
         }
     }
 
+    /**
+     * Persistent disk cache for normalised face bitmaps (JPEG, 512×512),
+     * keyed by photo file name. Survives process death and memory-cache
+     * eviction so replaying the animation is fast. ~100 KB per photo.
+     */
+    val faceDiskCacheDir: java.io.File
+        get() = java.io.File(context.cacheDir, "face_norm").apply { mkdirs() }
+
     val photoRepository by lazy { PhotoRepository(database.photoDao()) }
 
     val comparisonRepository by lazy { ComparisonRepository(database.comparisonDao()) }
@@ -69,6 +77,21 @@ class AppContainer(val context: Context) {
      * whenever a pair is shown.
      */
     val photoHandoffCache = LruCache<Long, Photo>(8)
+
+    /**
+     * A "focus compare" session started from the chart's photo bottom sheet:
+     * the pinned photo is shown against random opponents for the next
+     * [remaining] comparisons, letting the user correct a mis-scored photo.
+     * Lives in the container so it survives CompareViewModel recreation.
+     */
+    class FocusCompareSession(val photoId: Long, var remaining: Int = 15)
+
+    val focusCompareSession = MutableStateFlow<FocusCompareSession?>(null)
+
+    /** Starts a focus-compare session for [photoId] (resets counter to 15). */
+    fun startFocusCompare(photoId: Long) {
+        focusCompareSession.value = FocusCompareSession(photoId)
+    }
 
     /** Shared category selection synced between Compare and Chart screens. */
     private val _sharedCategory = MutableStateFlow(Category.FACE)

@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,7 +74,9 @@ import kotlinx.coroutines.delay
 @Composable
 fun ChartScreen(
     onPhotoClick: (Long) -> Unit,
+    onCompareClick: (Long) -> Unit = {},
     playTrigger: Int = 0,
+    playOrder: PlayOrder = PlayOrder.TIME_ASC,
     viewModel: ChartViewModel = viewModel(factory = ChartViewModel.Factory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     val state by viewModel.state.collectAsState()
@@ -88,7 +91,7 @@ fun ChartScreen(
 
     // ── React to play button taps from the TopAppBar ─────────────────────
     LaunchedEffect(playTrigger) {
-        if (playTrigger > 0) viewModel.startAnimation()
+        if (playTrigger > 0) viewModel.startAnimation(playOrder)
     }
 
     // ── Highlight the chart node for the current animation frame ──────────
@@ -386,6 +389,10 @@ fun ChartScreen(
                 onPhotoClick = {
                     onPhotoClick(photo.id)
                     viewModel.dismissBottomSheet()
+                },
+                onCompare = {
+                    onCompareClick(photo.id)
+                    viewModel.dismissBottomSheet()
                 }
             )
         }
@@ -490,7 +497,8 @@ private fun PhotoBottomSheet(
     hasLaterDay: Boolean,
     onStepDay: (forward: Boolean) -> Unit,
     onAddNote: () -> Unit,
-    onPhotoClick: () -> Unit
+    onPhotoClick: () -> Unit,
+    onCompare: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -576,14 +584,20 @@ private fun PhotoBottomSheet(
             ) {
                 Text("View Full Photo")
             }
-            OutlinedButton(onClick = onAddNote) {
+            // Icon-only buttons so the row never wraps on narrow screens.
+            IconButton(onClick = onCompare) {
+                Icon(
+                    Icons.Default.Compare,
+                    contentDescription = "Compare this photo (focus mode)",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onAddNote) {
                 Icon(
                     Icons.Default.StickyNote2,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    contentDescription = "Add day note",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.width(6.dp))
-                Text("Note")
             }
         }
 
